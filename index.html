@@ -424,7 +424,8 @@ async function submitRequest(){
 
     const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
     sendNotification('Stock Request Submitted — '+name, {
-      requester_name: name, department: department||'-', reason, request_date: fmtDate(date), items: itemLines
+      'Requester Name': name, 'Department': department||'-', 'Reason': reason,
+      'Request Date': fmtDate(date), 'Items Requested': itemLines
     });
 
     cart = [];
@@ -566,7 +567,7 @@ async function saveField(id, field, value){
     if(row) Object.assign(row, payload);
     if(field==='transfer_number' && value){
       sendNotification('Stock Transferred — '+(row?row.requester_name:''), {
-        requester_name: row?row.requester_name:'', product: row?row.product:'', transfer_number: value
+        'Requester Name': row?row.requester_name:'', 'Product': row?row.product:'', 'Transfer Number': value
       });
     }
     toast('Saved');
