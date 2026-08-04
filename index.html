@@ -116,6 +116,13 @@
       <input type="date" id="reqReturnDate">
     </div>
 
+    <div class="field" style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="notifyWarehouse" style="width:auto">
+      <label style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px;color:var(--ink)" for="notifyWarehouse">
+        Also notify warehouse@freedomofmovement.co.za (in case the usual recipient is unavailable)
+      </label>
+    </div>
+
     <div class="field">
       <label>Search Products</label>
       <input type="text" id="productSearch" placeholder="e.g. Corduroy Overshirt, Tekkie, Vellies..." oninput="onSearch()">
@@ -431,8 +438,11 @@ async function submitRequest(){
 
     const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
     if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
+      const notifyWarehouse = document.getElementById('notifyWarehouse').checked;
+      const toEmails = [CONFIG.LOGISTICS_EMAIL];
+      if(notifyWarehouse && CONFIG.WAREHOUSE_EMAIL) toEmails.push(CONFIG.WAREHOUSE_EMAIL);
       emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
-        email: CONFIG.LOGISTICS_EMAIL, requester_name: name, department: department||'-',
+        email: toEmails.join(','), requester_name: name, department: department||'-',
         reason, request_date: fmtDate(date), item_lines: itemLines
       }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
     }
@@ -441,6 +451,7 @@ async function submitRequest(){
     renderCart();
     document.getElementById('reqReason').value = '';
     document.getElementById('reqReturnDate').value = '';
+    document.getElementById('notifyWarehouse').checked = false;
     document.getElementById('productSearch').value = '';
     document.getElementById('results').style.display = 'none';
     await loadRequesters();

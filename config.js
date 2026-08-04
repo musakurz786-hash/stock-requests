@@ -19,6 +19,7 @@ const CONFIG = {
   EMAILJS_TEMPLATE_ID_SUBMITTED: 'template_94xemaq',
 
   LOGISTICS_EMAIL: 'musa@freedomofmovement.co.za',
+  WAREHOUSE_EMAIL: 'warehouse@freedomofmovement.co.za', // only cc'd when the requester ticks the opt-in checkbox
 
   ADMIN_PASSWORD: 'fom-admin-2026' // soft gate only, not real security — internal tool
 };
