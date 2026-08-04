@@ -226,7 +226,6 @@
 
 <div id="toast" class="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -262,6 +261,18 @@ function toast(msg, isErr){
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'toast show'+(isErr?' err':'');
   setTimeout(()=>t.className='toast', 3200);
+}
+
+// Notifies LOGISTICS_EMAIL via Web3Forms — no dashboard template to configure, it just emails
+// whatever fields get posted. No-ops silently if WEB3FORMS_ACCESS_KEY isn't set.
+async function sendNotification(subject, fields){
+  if(!CONFIG.WEB3FORMS_ACCESS_KEY) return;
+  try{
+    await fetch('https://api.web3forms.com/submit', {
+      method: 'POST', headers: {'Content-Type':'application/json','Accept':'application/json'},
+      body: JSON.stringify(Object.assign({access_key: CONFIG.WEB3FORMS_ACCESS_KEY, subject}, fields))
+    });
+  }catch(e){ console.error(e); }
 }
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -411,13 +422,10 @@ async function submitRequest(){
     }));
     await sb('POST','requests', rows, {'Prefer':'return=minimal'});
 
-    if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
-      const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
-      await emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
-        to_email: CONFIG.LOGISTICS_EMAIL, email: CONFIG.LOGISTICS_EMAIL, requester_name: name,
-        department: department||'-', reason, request_date: fmtDate(date), item_lines: itemLines
-      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
-    }
+    const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
+    sendNotification('Stock Request Submitted — '+name, {
+      requester_name: name, department: department||'-', reason, request_date: fmtDate(date), items: itemLines
+    });
 
     cart = [];
     renderCart();
@@ -556,11 +564,10 @@ async function saveField(id, field, value){
     await sb('PATCH','requests?id=eq.'+id, payload);
     const row = logRows.find(r=>r.id===id);
     if(row) Object.assign(row, payload);
-    if(field==='transfer_number' && value && CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_TRANSFERRED){
-      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_TRANSFERRED, {
-        to_email: CONFIG.LOGISTICS_EMAIL, email: CONFIG.LOGISTICS_EMAIL, requester_name: row?row.requester_name:'',
-        product: row?row.product:'', transfer_number: value
-      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
+    if(field==='transfer_number' && value){
+      sendNotification('Stock Transferred — '+(row?row.requester_name:''), {
+        requester_name: row?row.requester_name:'', product: row?row.product:'', transfer_number: value
+      });
     }
     toast('Saved');
   }catch(e){
@@ -856,7 +863,6 @@ async function importHistoryFile(){
 }
 
 // ---------------- INIT ----------------
-if(CONFIG.EMAILJS_PUBLIC_KEY && window.emailjs) emailjs.init({publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
 document.getElementById('reqDate').value = todayIso();
 (async function init(){
   try{ await loadRequesters(); }catch(e){ console.error(e); toast('Could not load requesters list', true); }
