@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FOM Stock Requests</title>
+<style>
+  :root{
+    --ink:#1c1c1c; --grey:#8a8a8a; --panel:#f5f5f5; --line:#e5e5e5; --good:#2e7d32; --bad:#c0392b; --warn:#b8860b; --brand-green:#8BC34A;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:Helvetica,Arial,sans-serif;color:var(--ink);background:#fff;margin:0;}
+  header{background:var(--brand-green);color:var(--ink);padding:18px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  header .brand{font-size:13px;letter-spacing:3px;text-transform:uppercase;font-weight:bold;display:flex;align-items:center;gap:10px;}
+  header nav{display:flex;gap:4px;flex-wrap:wrap;}
+  header nav button{background:transparent;border:1px solid rgba(28,28,28,.35);color:var(--ink);padding:8px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border-radius:2px;}
+  header nav button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  main{max-width:820px;margin:0 auto;padding:28px 20px 80px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  label{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);margin-bottom:6px;}
+  select,input[type=text],input[type=number],input[type=file],input[type=password],textarea{
+    width:100%;padding:11px 12px;font-size:14px;border:1px solid #ccc;border-radius:3px;font-family:inherit;background:#fff;color:var(--ink);
+  }
+  textarea{resize:vertical;min-height:60px;}
+  .field{margin-bottom:18px;}
+  .results{border:1px solid var(--line);border-radius:4px;max-height:320px;overflow:auto;margin-bottom:20px;}
+  .result-row{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;gap:10px;}
+  .result-row:last-child{border-bottom:none;}
+  .result-row:hover{background:var(--panel);}
+  .result-row .name{font-weight:bold;font-size:13px;}
+  .result-row .meta{font-size:11px;color:var(--grey);margin-top:2px;}
+  .result-row .avail{font-weight:bold;white-space:nowrap;font-size:12px;color:var(--grey);}
+  .result-row.out .avail{color:var(--bad);}
+  .empty{padding:20px;color:var(--grey);font-size:13px;text-align:center;}
+  .cart{border:1px solid var(--line);border-radius:4px;margin-bottom:18px;}
+  .cart-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);}
+  .cart-row:last-child{border-bottom:none;}
+  .cart-row .name{flex:1;font-size:13px;}
+  .cart-row .meta{font-size:11px;color:var(--grey);}
+  .cart-row input[type=number]{width:70px;padding:6px 8px;}
+  .cart-row button.rm{background:none;border:none;color:var(--bad);cursor:pointer;font-size:16px;line-height:1;padding:4px 6px;}
+  button.primary{background:var(--ink);color:#fff;border:none;padding:14px;width:100%;border-radius:3px;font-size:13px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;margin-top:8px;}
+  button.primary:disabled{opacity:.4;cursor:not-allowed;}
+  button.secondary{background:#fff;border:1px solid #ccc;padding:9px 14px;border-radius:3px;font-size:12px;cursor:pointer;font-family:inherit;}
+  button.small{padding:6px 10px;font-size:11px;}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:14px 22px;border-radius:4px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:50;max-width:90%;text-align:center;}
+  .toast.show{opacity:1;}
+  .toast.err{background:var(--bad);}
+  h2{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--grey);margin:0 0 16px;}
+  table.admin{width:100%;border-collapse:collapse;font-size:13px;}
+  table.admin th,table.admin td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+  table.admin th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);}
+  .admin-section{margin-bottom:40px;padding-bottom:32px;border-bottom:1px solid var(--line);}
+  .admin-section:last-child{border-bottom:none;}
+  .row-flex{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+  .row-flex .field{flex:1;min-width:140px;margin-bottom:0;}
+  .lock{max-width:320px;margin:80px auto;text-align:center;}
+  .subnav{display:flex;gap:4px;margin-bottom:24px;flex-wrap:wrap;}
+  .subnav button{background:#fff;border:1px solid #ccc;padding:8px 14px;font-size:12px;border-radius:3px;cursor:pointer;font-family:inherit;}
+  .subnav button.active{background:var(--panel);border-color:var(--ink);font-weight:bold;}
+  .card{border:1px solid var(--line);border-radius:4px;padding:16px 18px;margin-bottom:16px;}
+  .card .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .card .card-head .who{font-weight:bold;font-size:14px;}
+  .card .card-head .when{font-size:11px;color:var(--grey);}
+  .card .purpose-tag{display:inline-block;background:var(--panel);border-radius:20px;padding:3px 10px;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink);margin-top:4px;}
+  .card .note{font-size:12px;color:var(--grey);margin:6px 0 10px;font-style:italic;}
+  .item-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap;}
+  .item-row .iname{font-size:13px;flex:1;min-width:140px;}
+  .item-row .imeta{font-size:11px;color:var(--grey);}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;letter-spacing:.5px;text-transform:uppercase;font-weight:bold;}
+  .badge.pending{background:#fdf3d8;color:var(--warn);}
+  .badge.approved{background:#e3f0e3;color:var(--good);}
+  .badge.rejected{background:#fbe4e1;color:var(--bad);}
+  .badge.fulfilled{background:#e6e6e6;color:var(--ink);}
+  .qtyin{width:64px;padding:6px 8px;font-size:12px;}
+  select#filterStatus{width:auto;display:inline-block;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <img src="https://www.freedomofmovement.co.za/cdn/shop/files/FOM_4a277dc0-1749-4e5c-92ce-3fccd1ec7e55.png?v=1760905009&width=140" alt="FOM" style="height:20px;">
+    <span>Stock Requests</span>
+  </div>
+  <nav>
+    <button id="navRequest" class="active" onclick="showView('request')">New Request</button>
+    <button id="navMine" onclick="showView('mine')">My Requests</button>
+    <button id="navManage" onclick="showView('manage')">Manage</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- NEW REQUEST VIEW -->
+  <div id="view-request" class="view active">
+    <div class="field">
+      <label>Requester</label>
+      <select id="requesterSelect" onchange="onRequesterChange()">
+        <option value="">Select your name...</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Purpose</label>
+      <select id="purposeSelect">
+        <option value="photoshoot">Photoshoot</option>
+        <option value="gifting_pr">Gifting / PR</option>
+        <option value="event">Event</option>
+        <option value="social_media">Social Media</option>
+        <option value="in_store_display">In-Store Display</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>Notes (optional)</label>
+      <textarea id="requestNote" placeholder="Any extra context for the approver or warehouse..."></textarea>
+    </div>
+
+    <div class="field">
+      <label>Search Products</label>
+      <input type="text" id="productSearch" placeholder="e.g. Corduroy Overshirt, Tekkie, Vellies..." oninput="onSearch()" disabled>
+    </div>
+
+    <div id="results" class="results" style="display:none"></div>
+
+    <div id="cartWrap" style="display:none">
+      <h2 style="margin-top:24px">Request Cart</h2>
+      <div id="cart" class="cart"></div>
+    </div>
+
+    <button class="primary" id="submitBtn" onclick="submitRequest()" disabled>Submit Request</button>
+  </div>
+
+  <!-- MY REQUESTS VIEW -->
+  <div id="view-mine" class="view">
+    <div class="field">
+      <label>Requester</label>
+      <select id="mineSelect" onchange="loadMyRequests()">
+        <option value="">Select your name...</option>
+      </select>
+    </div>
+    <div id="mineList"></div>
+  </div>
+
+  <!-- MANAGE VIEW -->
+  <div id="view-manage" class="view">
+    <div id="manageLock" class="lock">
+      <label>Manage Password</label>
+      <input type="password" id="managePw">
+      <button class="primary" onclick="tryManageUnlock()">Unlock</button>
+    </div>
+
+    <div id="manageBody" style="display:none">
+      <div class="subnav">
+        <button id="subApprove" class="active" onclick="showSub('approve')">Approve Queue</button>
+        <button id="subFulfil" onclick="showSub('fulfil')">Fulfilment Queue</button>
+        <button id="subRequesters" onclick="showSub('requesters')">Requesters</button>
+        <button id="subStock" onclick="showSub('stock')">Stock</button>
+        <button id="subHistory" onclick="showSub('history')">History</button>
+      </div>
+
+      <div id="sub-approve" class="subview"></div>
+      <div id="sub-fulfil" class="subview" style="display:none"></div>
+
+      <div id="sub-requesters" class="subview" style="display:none">
+        <div class="admin-section">
+          <h2>Add Requester</h2>
+          <div class="row-flex">
+            <div class="field"><label>Name</label><input type="text" id="newReqName"></div>
+            <div class="field"><label>Email (optional)</label><input type="text" id="newReqEmail"></div>
+            <div class="field"><label>Department (optional)</label><input type="text" id="newReqDept"></div>
+            <button class="secondary" onclick="addRequester()">Add</button>
+          </div>
+        </div>
+        <div class="admin-section">
+          <h2>Requesters</h2>
+          <table class="admin" id="requestersTable"><thead><tr><th>Name</th><th>Email</th><th>Department</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div id="sub-stock" class="subview" style="display:none">
+        <div class="admin-section">
+          <h2>Import Stock Report</h2>
+          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the "Inventory Products Stock Level Report" export (.xlsx/.csv). Matches by SKU and updates available stock for existing products; new SKUs are added.</p>
+          <input type="file" id="stockFile" accept=".xlsx,.xls,.csv">
+          <button class="secondary" style="margin-top:10px" onclick="importStockFile()">Import</button>
+          <div id="importStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
+        </div>
+        <div class="admin-section">
+          <h2>Add / Edit Product</h2>
+          <div class="row-flex" style="margin-bottom:14px">
+            <div class="field"><label>SKU</label><input type="text" id="newSku"></div>
+            <div class="field"><label>Product</label><input type="text" id="newProduct"></div>
+            <div class="field"><label>Category</label><input type="text" id="newCategory"></div>
+            <div class="field"><label>Available Qty</label><input type="number" id="newAvailable" value="0"></div>
+            <button class="secondary" onclick="upsertProduct()">Save</button>
+          </div>
+          <input type="text" id="stockSearch" placeholder="Search by product name or SKU to edit available qty..." oninput="onStockSearch()">
+          <div id="stockResults" class="results" style="display:none;margin-top:10px"></div>
+        </div>
+      </div>
+
+      <div id="sub-history" class="subview" style="display:none">
+        <div class="admin-section">
+          <div class="row-flex" style="margin-bottom:14px">
+            <div class="field">
+              <label>Filter Status</label>
+              <select id="filterStatus" onchange="loadHistory()">
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="fulfilled">Fulfilled</option>
+              </select>
+            </div>
+            <button class="secondary" onclick="loadHistory()">Refresh</button>
+            <button class="secondary" onclick="exportHistoryCsv()">Export CSV</button>
+          </div>
+          <table class="admin" id="historyTable">
+            <thead><tr><th>Date</th><th>Requester</th><th>Dept</th><th>Purpose</th><th>Product</th><th>Qty Req</th><th>Qty Appr</th><th>Status</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<div id="toast" class="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="config.js"></script>
+<script>
+const SBH = {'apikey':CONFIG.SB_KEY,'Authorization':'Bearer '+CONFIG.SB_KEY,'Content-Type':'application/json'};
+
+const PURPOSE_LABELS = {
+  photoshoot:'Photoshoot', gifting_pr:'Gifting / PR', event:'Event',
+  social_media:'Social Media', in_store_display:'In-Store Display', other:'Other'
+};
+
+async function sb(method, path, body, headers){
+  const r = await fetch(CONFIG.SB_URL+'/rest/v1/'+path, {
+    method, headers: Object.assign({}, SBH, headers||{}), body: body ? JSON.stringify(body) : undefined
+  });
+  if(!r.ok){ const t = await r.text(); throw new Error(t); }
+  const ct = r.headers.get('content-type')||'';
+  if(ct.includes('json')) return r.json();
+  return [];
+}
+
+async function sbAll(path){
+  let all = []; let from = 0; const pageSize = 1000;
+  while(true){
+    const r = await fetch(CONFIG.SB_URL+'/rest/v1/'+path, {
+      headers: Object.assign({}, SBH, {'Range-Unit':'items','Range':from+'-'+(from+pageSize-1)})
+    });
+    if(!r.ok) throw new Error(await r.text());
+    const page = await r.json();
+    all = all.concat(page);
+    if(page.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+function toast(msg, isErr){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show'+(isErr?' err':'');
+  setTimeout(()=>t.className='toast', 3200);
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function fmtDate(d){ return new Date(d).toLocaleDateString('en-ZA', {year:'numeric',month:'short',day:'numeric'}); }
+
+function uuid(){
+  if(crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
+    const r = Math.random()*16|0, v = c==='x'?r:(r&0x3|0x8); return v.toString(16);
+  });
+}
+
+function showView(name){
+  ['request','mine','manage'].forEach(v=>{
+    document.getElementById('view-'+v).classList.toggle('active', v===name);
+  });
+  document.getElementById('navRequest').classList.toggle('active', name==='request');
+  document.getElementById('navMine').classList.toggle('active', name==='mine');
+  document.getElementById('navManage').classList.toggle('active', name==='manage');
+  if(name==='manage' && sessionStorage.getItem('srManage')==='1') showManageBody();
+}
+
+// ---------------- SHARED DATA ----------------
+let REQUESTERS = [];
+let PRODUCTS = [];
+
+async function loadRequesters(){
+  REQUESTERS = await sb('GET','requesters?select=*&order=name.asc');
+  const opts = '<option value="">Select your name...</option>' + REQUESTERS.map(r=>'<option value="'+escapeHtml(r.name)+'">'+escapeHtml(r.name)+'</option>').join('');
+  document.getElementById('requesterSelect').innerHTML = opts;
+  document.getElementById('mineSelect').innerHTML = opts;
+}
+
+async function loadProducts(){
+  PRODUCTS = await sbAll('products?select=*&order=product.asc');
+  document.getElementById('productSearch').disabled = false;
+}
+
+// ---------------- NEW REQUEST VIEW ----------------
+let selectedRequester = null;
+let cart = []; // {sku, product, category, qty}
+
+function onRequesterChange(){
+  selectedRequester = document.getElementById('requesterSelect').value || null;
+  updateSubmitEnabled();
+}
+
+function onSearch(){
+  const q = document.getElementById('productSearch').value.trim().toLowerCase();
+  const results = document.getElementById('results');
+  if(q.length < 2){ results.style.display='none'; results.innerHTML=''; return; }
+  const matches = PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,100);
+  results.style.display='block';
+  if(!matches.length){ results.innerHTML = '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
+  results.innerHTML = matches.map(p => {
+    const out = Number(p.available) <= 0;
+    return '<div class="result-row'+(out?' out':'')+'" onclick="addToCart(\''+p.sku.replace(/'/g,"\\'")+'\')">'+
+      '<div><div class="name">'+escapeHtml(p.product)+'</div>'+
+      '<div class="meta">SKU '+escapeHtml(p.sku)+' &middot; '+escapeHtml(p.category||'')+'</div></div>'+
+      '<div class="avail">'+(out?'Out of stock':Math.floor(p.available)+' available')+'</div></div>';
+  }).join('');
+}
+
+function addToCart(sku){
+  if(!selectedRequester){ toast('Select your name first', true); return; }
+  const p = PRODUCTS.find(x=>x.sku===sku);
+  if(!p) return;
+  const existing = cart.find(c=>c.sku===sku);
+  if(existing){ existing.qty += 1; }
+  else{ cart.push({sku:p.sku, product:p.product, category:p.category, available:p.available, qty:1}); }
+  renderCart();
+}
+
+function updateCartQty(sku, qty){
+  const item = cart.find(c=>c.sku===sku);
+  if(!item) return;
+  item.qty = Math.max(1, parseInt(qty)||1);
+  updateSubmitEnabled();
+}
+
+function removeFromCart(sku){
+  cart = cart.filter(c=>c.sku!==sku);
+  renderCart();
+}
+
+function renderCart(){
+  const wrap = document.getElementById('cartWrap');
+  const cartEl = document.getElementById('cart');
+  if(!cart.length){ wrap.style.display='none'; cartEl.innerHTML=''; updateSubmitEnabled(); return; }
+  wrap.style.display='block';
+  cartEl.innerHTML = cart.map(c=>{
+    const out = Number(c.available) <= 0;
+    return '<div class="cart-row">'+
+      '<div class="name">'+escapeHtml(c.product)+'<div class="meta">SKU '+escapeHtml(c.sku)+(out?' &middot; <span style="color:var(--bad)">out of stock</span>':'')+'</div></div>'+
+      '<input type="number" min="1" value="'+c.qty+'" onchange="updateCartQty(\''+c.sku.replace(/'/g,"\\'")+'\', this.value)">'+
+      '<button class="rm" onclick="removeFromCart(\''+c.sku.replace(/'/g,"\\'")+'\')" title="Remove">&times;</button>'+
+    '</div>';
+  }).join('');
+  updateSubmitEnabled();
+}
+
+function updateSubmitEnabled(){
+  document.getElementById('submitBtn').disabled = !(selectedRequester && cart.length);
+}
+
+async function submitRequest(){
+  if(!selectedRequester || !cart.length) return;
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true; btn.textContent = 'Submitting...';
+
+  const requesterRow = REQUESTERS.find(r=>r.name===selectedRequester);
+  const purpose = document.getElementById('purposeSelect').value;
+  const note = document.getElementById('requestNote').value.trim();
+  const batch_id = uuid();
+
+  try{
+    const rows = cart.map(c => ({
+      batch_id, requester_name: selectedRequester, department: requesterRow ? requesterRow.department : null,
+      purpose, note: note || null, sku: c.sku, product: c.product, qty_requested: c.qty, status: 'pending'
+    }));
+    await sb('POST','requests', rows, {'Prefer':'return=minimal'});
+
+    if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
+      const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
+      const toList = [requesterRow && requesterRow.email, CONFIG.APPROVER_EMAIL].filter((v,i,a)=>v && a.indexOf(v)===i).join(', ');
+      await emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
+        to_email: toList, email: toList, requester_name: selectedRequester,
+        purpose: PURPOSE_LABELS[purpose]||purpose, note: note||'-', item_lines: itemLines,
+        request_date: new Date().toLocaleDateString('en-ZA', {year:'numeric',month:'long',day:'numeric'})
+      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
+    }
+
+    cart = [];
+    renderCart();
+    document.getElementById('requestNote').value = '';
+    document.getElementById('productSearch').value = '';
+    document.getElementById('results').style.display = 'none';
+    toast('Request submitted — the approver has been notified.');
+  }catch(e){
+    console.error(e);
+    toast('Something went wrong submitting the request', true);
+  }finally{
+    btn.disabled = false; btn.textContent = 'Submit Request';
+    updateSubmitEnabled();
+  }
+}
+
+// ---------------- MY REQUESTS VIEW ----------------
+function groupByBatch(rows){
+  const map = new Map();
+  rows.forEach(r=>{
+    if(!map.has(r.batch_id)) map.set(r.batch_id, []);
+    map.get(r.batch_id).push(r);
+  });
+  return Array.from(map.values()).sort((a,b)=> new Date(b[0].created_at) - new Date(a[0].created_at));
+}
+
+function statusBadge(status){
+  return '<span class="badge '+status+'">'+status+'</span>';
+}
+
+async function loadMyRequests(){
+  const name = document.getElementById('mineSelect').value;
+  const list = document.getElementById('mineList');
+  if(!name){ list.innerHTML=''; return; }
+  list.innerHTML = '<div class="empty">Loading...</div>';
+  const rows = await sb('GET','requests?select=*&requester_name=eq.'+encodeURIComponent(name)+'&order=created_at.desc&limit=300');
+  if(!rows.length){ list.innerHTML = '<div class="empty">No requests yet.</div>'; return; }
+  const batches = groupByBatch(rows);
+  list.innerHTML = batches.map(items=>{
+    const head = items[0];
+    const itemsHtml = items.map(i=>
+      '<div class="item-row"><div class="iname">'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty_requested+
+      (i.status==='approved'||i.status==='fulfilled' ? (i.qty_approved!=null && i.qty_approved!==i.qty_requested ? ' (approved x'+i.qty_approved+')' : '') : '')+
+      '</span></div><div>'+statusBadge(i.status)+'</div></div>'
+    ).join('');
+    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+'</div>'+
+      '<span class="purpose-tag">'+(PURPOSE_LABELS[head.purpose]||head.purpose)+'</span></div>'+
+      '<div class="when">'+fmtDate(head.created_at)+'</div></div>'+
+      (head.note ? '<div class="note">'+escapeHtml(head.note)+'</div>' : '')+
+      itemsHtml+'</div>';
+  }).join('');
+}
+
+// ---------------- MANAGE VIEW ----------------
+function tryManageUnlock(){
+  if(document.getElementById('managePw').value === CONFIG.ADMIN_PASSWORD){
+    sessionStorage.setItem('srManage','1');
+    showManageBody();
+  } else {
+    toast('Incorrect password', true);
+  }
+}
+
+function showManageBody(){
+  document.getElementById('manageLock').style.display = 'none';
+  document.getElementById('manageBody').style.display = 'block';
+  showSub('approve');
+}
+
+function showSub(name){
+  ['approve','fulfil','requesters','stock','history'].forEach(s=>{
+    document.getElementById('sub-'+s).style.display = (s===name?'block':'none');
+    document.getElementById('sub'+s[0].toUpperCase()+s.slice(1)).classList.toggle('active', s===name);
+  });
+  if(name==='approve') loadApproveQueue();
+  if(name==='fulfil') loadFulfilQueue();
+  if(name==='requesters') loadRequestersTable();
+  if(name==='history') loadHistory();
+}
+
+// -- Approve Queue --
+async function loadApproveQueue(){
+  const el = document.getElementById('sub-approve');
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  const rows = await sb('GET','requests?select=*&status=eq.pending&order=created_at.asc');
+  if(!rows.length){ el.innerHTML = '<div class="empty">No pending requests.</div>'; return; }
+  const batches = groupByBatch(rows);
+  el.innerHTML = batches.map(items=>{
+    const head = items[0];
+    const itemsHtml = items.map(i=>
+      '<div class="item-row"><div class="iname">'+escapeHtml(i.product)+' <span class="imeta">requested x'+i.qty_requested+'</span></div>'+
+      '<div style="display:flex;gap:6px;align-items:center">'+
+      '<input type="number" class="qtyin" id="qtyApprove-'+i.id+'" min="0" value="'+i.qty_requested+'">'+
+      '<button class="secondary small" onclick="approveItem('+i.id+')">Approve</button>'+
+      '<button class="secondary small" onclick="rejectItem('+i.id+')">Reject</button>'+
+      '</div></div>'
+    ).join('');
+    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
+      (head.department ? ' <span class="imeta">('+escapeHtml(head.department)+')</span>' : '')+'</div>'+
+      '<span class="purpose-tag">'+(PURPOSE_LABELS[head.purpose]||head.purpose)+'</span></div>'+
+      '<div class="when">'+fmtDate(head.created_at)+' &middot; <button class="secondary small" onclick="approveAllInBatch(\''+head.batch_id+'\')">Approve All</button></div></div>'+
+      (head.note ? '<div class="note">'+escapeHtml(head.note)+'</div>' : '')+
+      itemsHtml+'</div>';
+  }).join('');
+}
+
+async function emailDecision(item, status, reason){
+  if(!(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_DECIDED)) return;
+  const requester = REQUESTERS.find(r=>r.name===item.requester_name);
+  const toList = [requester && requester.email, CONFIG.APPROVER_EMAIL].filter((v,i,a)=>v && a.indexOf(v)===i).join(', ');
+  try{
+    await emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_DECIDED, {
+      to_email: toList, email: toList, requester_name: item.requester_name, product: item.product,
+      qty: status==='approved' ? item.qty_approved : item.qty_requested, status, reason: reason||'-'
+    }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
+  }catch(e){ console.error(e); }
+}
+
+async function approveItem(id){
+  const input = document.getElementById('qtyApprove-'+id);
+  const qty = Math.max(0, parseInt(input.value)||0);
+  try{
+    const rows = await sb('GET','requests?select=*&id=eq.'+id);
+    const item = rows[0];
+    await sb('PATCH','requests?id=eq.'+id, {status:'approved', qty_approved: qty, approved_at: new Date().toISOString()});
+    item.qty_approved = qty;
+    emailDecision(item, 'approved');
+    toast('Approved');
+    loadApproveQueue();
+  }catch(e){
+    console.error(e);
+    toast('Could not approve this item', true);
+  }
+}
+
+async function rejectItem(id){
+  const reason = prompt('Reason for rejecting this item (optional):') || '';
+  try{
+    const rows = await sb('GET','requests?select=*&id=eq.'+id);
+    const item = rows[0];
+    await sb('PATCH','requests?id=eq.'+id, {status:'rejected', rejected_reason: reason || null, approved_at: new Date().toISOString()});
+    emailDecision(item, 'rejected', reason);
+    toast('Rejected');
+    loadApproveQueue();
+  }catch(e){
+    console.error(e);
+    toast('Could not reject this item', true);
+  }
+}
+
+async function approveAllInBatch(batchId){
+  const rows = await sb('GET','requests?select=*&batch_id=eq.'+batchId+'&status=eq.pending');
+  for(const r of rows){
+    await sb('PATCH','requests?id=eq.'+r.id, {status:'approved', qty_approved: r.qty_requested, approved_at: new Date().toISOString()});
+    r.qty_approved = r.qty_requested;
+    emailDecision(r, 'approved');
+  }
+  toast('All items approved');
+  loadApproveQueue();
+}
+
+// -- Fulfilment Queue --
+async function loadFulfilQueue(){
+  const el = document.getElementById('sub-fulfil');
+  el.innerHTML = '<div class="empty">Loading...</div>';
+  const rows = await sb('GET','requests?select=*&status=eq.approved&order=approved_at.asc');
+  if(!rows.length){ el.innerHTML = '<div class="empty">Nothing waiting on fulfilment.</div>'; return; }
+  const batches = groupByBatch(rows);
+  el.innerHTML = batches.map(items=>{
+    const head = items[0];
+    const itemsHtml = items.map(i=>{
+      const p = PRODUCTS.find(x=>x.sku===i.sku);
+      const avail = p ? Number(p.available) : null;
+      const short = avail!=null && avail < i.qty_approved;
+      return '<div class="item-row"><div class="iname">'+escapeHtml(i.product)+' <span class="imeta">approved x'+i.qty_approved+
+        (avail!=null ? ' &middot; '+avail+' in stock'+(short?' <span style="color:var(--bad)">(short)</span>':'') : '')+'</span></div>'+
+        '<button class="secondary small" onclick="markFulfilled('+i.id+')">Mark Fulfilled</button></div>';
+    }).join('');
+    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
+      (head.department ? ' <span class="imeta">('+escapeHtml(head.department)+')</span>' : '')+'</div>'+
+      '<span class="purpose-tag">'+(PURPOSE_LABELS[head.purpose]||head.purpose)+'</span></div>'+
+      '<div class="when">approved '+fmtDate(head.approved_at)+' &middot; <button class="secondary small" onclick="fulfilAllInBatch(\''+head.batch_id+'\')">Fulfil All</button></div></div>'+
+      itemsHtml+'</div>';
+  }).join('');
+}
+
+async function markFulfilled(id){
+  try{
+    const rows = await sb('GET','requests?select=*&id=eq.'+id);
+    const item = rows[0];
+    const p = PRODUCTS.find(x=>x.sku===item.sku);
+    if(p){
+      const newAvailable = Number(p.available) - Number(item.qty_approved);
+      await sb('PATCH','products?sku=eq.'+encodeURIComponent(item.sku), {available: newAvailable, updated_at: new Date().toISOString()});
+      p.available = newAvailable;
+    }
+    await sb('PATCH','requests?id=eq.'+id, {status:'fulfilled', fulfilled_at: new Date().toISOString()});
+    if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_FULFILLED){
+      const requester = REQUESTERS.find(r=>r.name===item.requester_name);
+      const toList = [requester && requester.email, CONFIG.WAREHOUSE_EMAIL].filter((v,i,a)=>v && a.indexOf(v)===i).join(', ');
+      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_FULFILLED, {
+        to_email: toList, email: toList, requester_name: item.requester_name, product: item.product, qty: item.qty_approved
+      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
+    }
+    toast('Marked fulfilled');
+    loadFulfilQueue();
+  }catch(e){
+    console.error(e);
+    toast('Could not mark this item fulfilled', true);
+  }
+}
+
+async function fulfilAllInBatch(batchId){
+  const rows = await sb('GET','requests?select=*&batch_id=eq.'+batchId+'&status=eq.approved');
+  for(const r of rows){ await markFulfilled(r.id); }
+}
+
+// -- Requesters --
+async function loadRequestersTable(){
+  const rows = await sb('GET','requesters?select=*&order=name.asc');
+  const tbody = document.querySelector('#requestersTable tbody');
+  tbody.innerHTML = rows.map(r=>{
+    const emailInput = '<input type="text" value="'+escapeHtml(r.email||'')+'" placeholder="name@freedomofmovement.co.za" '+
+      'style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #ccc;border-radius:3px" '+
+      'onblur="saveRequesterField(\''+r.name.replace(/'/g,"\\'")+'\', \'email\', this.value)">';
+    const deptInput = '<input type="text" value="'+escapeHtml(r.department||'')+'" '+
+      'style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #ccc;border-radius:3px" '+
+      'onblur="saveRequesterField(\''+r.name.replace(/'/g,"\\'")+'\', \'department\', this.value)">';
+    return '<tr><td>'+escapeHtml(r.name)+'</td><td>'+emailInput+'</td><td>'+deptInput+'</td>'+
+      '<td><button class="secondary small" onclick="deleteRequester(\''+r.name.replace(/'/g,"\\'")+'\')">Remove</button></td></tr>';
+  }).join('');
+}
+
+async function addRequester(){
+  const name = document.getElementById('newReqName').value.trim();
+  const email = document.getElementById('newReqEmail').value.trim();
+  const department = document.getElementById('newReqDept').value.trim();
+  if(!name){ toast('Enter a name first', true); return; }
+  try{
+    await sb('POST','requesters', {name, email: email||null, department: department||null}, {'Prefer':'return=minimal'});
+    document.getElementById('newReqName').value = '';
+    document.getElementById('newReqEmail').value = '';
+    document.getElementById('newReqDept').value = '';
+    await loadRequesters();
+    loadRequestersTable();
+    toast(name+' added');
+  }catch(e){
+    console.error(e);
+    toast('Could not add requester — name may already exist', true);
+  }
+}
+
+async function saveRequesterField(name, field, value){
+  value = value.trim();
+  try{
+    await sb('PATCH','requesters?name=eq.'+encodeURIComponent(name), {[field]: value || null});
+    const r = REQUESTERS.find(x=>x.name===name);
+    if(r) r[field] = value;
+    toast('Saved');
+  }catch(e){
+    console.error(e);
+    toast('Could not save that change', true);
+  }
+}
+
+async function deleteRequester(name){
+  if(!confirm('Remove '+name+' from the requesters list? Their past requests stay in history.')) return;
+  try{
+    await sb('DELETE','requesters?name=eq.'+encodeURIComponent(name), null, {'Prefer':'return=minimal'});
+    await loadRequesters();
+    loadRequestersTable();
+    toast('Removed');
+  }catch(e){
+    console.error(e);
+    toast('Could not remove this requester', true);
+  }
+}
+
+// -- Stock --
+async function importStockFile(){
+  const input = document.getElementById('stockFile');
+  const status = document.getElementById('importStatus');
+  if(!input.files.length){ toast('Choose a file first', true); return; }
+  status.textContent = 'Reading file...';
+  const file = input.files[0];
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array'});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1});
+
+  let headerIdx = rows.findIndex(r => r.some(c => String(c).trim().toLowerCase()==='sku'));
+  if(headerIdx === -1){ status.textContent = 'Could not find an "SKU" column in this file.'; return; }
+  const header = rows[headerIdx].map(h => String(h).trim().toLowerCase());
+  const skuCol = header.indexOf('sku');
+  const productCol = header.indexOf('product');
+  const catCol = header.indexOf('category');
+  const availCol = header.indexOf('available') >= 0 ? header.indexOf('available') : header.indexOf('stock on hand');
+
+  const existingBySku = {};
+  PRODUCTS.forEach(p => existingBySku[p.sku] = p);
+
+  const updates = [];
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const r = rows[i];
+    const sku = r[skuCol] ? String(r[skuCol]).trim() : '';
+    if(!sku) continue;
+    const existing = existingBySku[sku];
+    const available = availCol >= 0 ? Number(r[availCol])||0 : (existing? existing.available : 0);
+    updates.push({
+      sku, product: (r[productCol]||(existing?existing.product:'')),
+      category: catCol>=0 ? (r[catCol]||(existing?existing.category:null)) : (existing?existing.category:null),
+      subcat: existing?existing.subcat:null, available, updated_at: new Date().toISOString()
+    });
+  }
+
+  status.textContent = 'Updating '+updates.length+' products...';
+  const batchSize = 500;
+  for(let i=0;i<updates.length;i+=batchSize){
+    const batch = updates.slice(i,i+batchSize);
+    await sb('POST','products', batch, {'Prefer':'resolution=merge-duplicates,return=minimal'});
+    status.textContent = 'Updated '+Math.min(i+batchSize,updates.length)+' / '+updates.length+' products...';
+  }
+  status.textContent = 'Done — '+updates.length+' products updated. Reloading catalog...';
+  await loadProducts();
+  status.textContent = 'Stock import complete: '+updates.length+' products updated.';
+}
+
+async function upsertProduct(){
+  const sku = document.getElementById('newSku').value.trim();
+  const product = document.getElementById('newProduct').value.trim();
+  const category = document.getElementById('newCategory').value.trim();
+  const available = Number(document.getElementById('newAvailable').value) || 0;
+  if(!sku || !product){ toast('SKU and product name are required', true); return; }
+  try{
+    await sb('POST','products', {sku, product, category: category||null, available, updated_at: new Date().toISOString()},
+      {'Prefer':'resolution=merge-duplicates,return=minimal'});
+    document.getElementById('newSku').value = '';
+    document.getElementById('newProduct').value = '';
+    document.getElementById('newCategory').value = '';
+    document.getElementById('newAvailable').value = '0';
+    await loadProducts();
+    toast('Product saved');
+  }catch(e){
+    console.error(e);
+    toast('Could not save this product', true);
+  }
+}
+
+function onStockSearch(){
+  const q = document.getElementById('stockSearch').value.trim().toLowerCase();
+  const results = document.getElementById('stockResults');
+  if(q.length < 2){ results.style.display='none'; results.innerHTML=''; return; }
+  const matches = PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,50);
+  results.style.display='block';
+  if(!matches.length){ results.innerHTML = '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
+  results.innerHTML = matches.map(p =>
+    '<div class="result-row" style="cursor:default">'+
+      '<div><div class="name">'+escapeHtml(p.product)+'</div><div class="meta">SKU '+escapeHtml(p.sku)+'</div></div>'+
+      '<div class="row-flex" style="gap:6px">'+
+        '<input type="number" step="1" value="'+p.available+'" id="availInput'+p.sku+'" style="width:90px;padding:8px">'+
+        '<button class="secondary small" onclick="saveAvailEdit(\''+p.sku.replace(/'/g,"\\'")+'\')">Save</button>'+
+      '</div>'+
+    '</div>'
+  ).join('');
+}
+
+async function saveAvailEdit(sku){
+  const input = document.getElementById('availInput'+sku);
+  const newAvail = Number(input.value);
+  if(!(newAvail >= 0)){ toast('Enter a valid quantity', true); return; }
+  try{
+    await sb('PATCH','products?sku=eq.'+encodeURIComponent(sku), {available: newAvail, updated_at: new Date().toISOString()});
+    const p = PRODUCTS.find(x=>x.sku===sku);
+    if(p) p.available = newAvail;
+    toast('Stock updated');
+  }catch(e){
+    console.error(e);
+    toast('Could not update stock', true);
+  }
+}
+
+// -- History --
+let historyRows = [];
+async function loadHistory(){
+  const status = document.getElementById('filterStatus').value;
+  let path = 'requests?select=*&order=created_at.desc&limit=500';
+  if(status) path += '&status=eq.'+status;
+  historyRows = await sb('GET', path);
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = historyRows.map(r=>
+    '<tr><td>'+fmtDate(r.created_at)+'</td><td>'+escapeHtml(r.requester_name)+'</td><td>'+escapeHtml(r.department||'')+'</td>'+
+    '<td>'+(PURPOSE_LABELS[r.purpose]||r.purpose)+'</td><td>'+escapeHtml(r.product)+'</td>'+
+    '<td>'+r.qty_requested+'</td><td>'+(r.qty_approved!=null?r.qty_approved:'-')+'</td>'+
+    '<td>'+statusBadge(r.status)+'</td>'+
+    '<td><button class="secondary small" onclick="deleteRequestRow('+r.id+')">Delete</button></td></tr>'
+  ).join('');
+}
+
+async function deleteRequestRow(id){
+  const row = historyRows.find(r=>r.id===id);
+  if(!row) return;
+  const willRestock = row.status === 'fulfilled' && row.qty_approved;
+  const msg = 'Delete this request for '+row.requester_name+' ('+row.product+')?'+
+    (willRestock ? ' '+row.qty_approved+' units will be restocked back to available.' : '');
+  if(!confirm(msg)) return;
+  try{
+    if(willRestock){
+      const p = PRODUCTS.find(x=>x.sku===row.sku);
+      if(p){
+        const newAvailable = Number(p.available) + Number(row.qty_approved);
+        await sb('PATCH','products?sku=eq.'+encodeURIComponent(row.sku), {available: newAvailable});
+        p.available = newAvailable;
+      }
+    }
+    await sb('DELETE','requests?id=eq.'+id, null, {'Prefer':'return=minimal'});
+    toast('Deleted'+(willRestock?' and stock restocked':''));
+    loadHistory();
+  }catch(e){
+    console.error(e);
+    toast('Could not delete this request', true);
+  }
+}
+
+function exportHistoryCsv(){
+  const header = ['Date','Requester','Department','Purpose','SKU','Product','Qty Requested','Qty Approved','Status'];
+  const lines = [header.join(',')];
+  historyRows.forEach(r=>{
+    lines.push([fmtDate(r.created_at), r.requester_name, r.department||'', PURPOSE_LABELS[r.purpose]||r.purpose,
+      r.sku||'', '"'+String(r.product).replace(/"/g,'""')+'"', r.qty_requested, r.qty_approved!=null?r.qty_approved:'', r.status].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'stock-requests-history.csv'; a.click();
+}
+
+// ---------------- INIT ----------------
+if(CONFIG.EMAILJS_PUBLIC_KEY && window.emailjs) emailjs.init({publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
+(async function init(){
+  try{ await loadRequesters(); }catch(e){ console.error(e); toast('Could not load requesters list', true); }
+  try{ await loadProducts(); }catch(e){ console.error(e); toast('Could not load product catalog', true); }
+})();
+if(sessionStorage.getItem('srManage')==='1') showManageBody();
+</script>
+</body>
+</html>
