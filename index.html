@@ -230,7 +230,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script>
-const SBH = {'apikey':CONFIG.SB_KEY,'Authorization':'Bearer '+CONFIG.SB_KEY,'Content-Type':'application/json'};
+const SBH = {'apikey':CONFIG.SB_KEY,'Authorization':'Bearer '+CONFIG.SB_KEY,'Content-Type':'application/json',
+  'Accept-Profile':CONFIG.SB_SCHEMA,'Content-Profile':CONFIG.SB_SCHEMA};
 
 async function sb(method, path, body, headers){
   const r = await fetch(CONFIG.SB_URL+'/rest/v1/'+path, {

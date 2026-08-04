@@ -1,5 +1,8 @@
 -- Stock Requests — Supabase schema
--- Run this once in the Supabase SQL Editor on a new project (separate from WHIP / staff-allowance).
+-- Run this once in the Supabase SQL Editor. Lives in its own "stock_requests" schema so it can
+-- safely share the WHIP project's database (free-tier plans cap the number of projects per org,
+-- and WHIP's project already has its own "products"/"orders" tables in "public" — a separate
+-- schema keeps this app's tables fully isolated from those, same as if it were its own project).
 --
 -- Models the marketing team's actual process (not a budget/approval flow): a requester submits a
 -- request for one or more products; logistics later pulls the stock and records a Transfer Number
@@ -7,13 +10,15 @@
 -- whether it was received back, an outcome note, and a return transfer number). Many requests are
 -- simply consumed and never reconciled — that's normal, not an error state.
 
-create table requesters (
+create schema if not exists stock_requests;
+
+create table stock_requests.requesters (
   id bigint generated always as identity primary key,
   name text not null unique,
   department text
 );
 
-create table products (
+create table stock_requests.products (
   sku text primary key,
   product text not null,
   category text,
@@ -23,7 +28,7 @@ create table products (
 
 -- One row per product line. Items submitted together in the same request share a batch_id so the
 -- UI can group them back into a single request card.
-create table requests (
+create table stock_requests.requests (
   id bigint generated always as identity primary key,
   batch_id uuid not null,
   created_at timestamptz default now(),
@@ -44,24 +49,33 @@ create table requests (
   notes text
 );
 
-create index requests_batch_idx on requests(batch_id);
-create index requests_requester_idx on requests(requester_name);
-create index requests_transfer_idx on requests(transfer_number);
-create index products_product_idx on products using gin (to_tsvector('english', product));
+create index requests_batch_idx on stock_requests.requests(batch_id);
+create index requests_requester_idx on stock_requests.requests(requester_name);
+create index requests_transfer_idx on stock_requests.requests(transfer_number);
+create index products_product_idx on stock_requests.products using gin (to_tsvector('english', product));
 
-alter table requesters enable row level security;
-alter table products enable row level security;
-alter table requests enable row level security;
+alter table stock_requests.requesters enable row level security;
+alter table stock_requests.products enable row level security;
+alter table stock_requests.requests enable row level security;
 
 -- Internal tool, no login system — same anon-key model as WHIP and staff-allowance. Not suitable
 -- if this were ever made public-facing.
-create policy "anon read requesters" on requesters for select using (true);
-create policy "anon insert requesters" on requesters for insert with check (true);
-create policy "anon update requesters" on requesters for update using (true) with check (true);
-create policy "anon delete requesters" on requesters for delete using (true);
-create policy "anon read products" on products for select using (true);
-create policy "anon write products" on products for all using (true) with check (true);
-create policy "anon read requests" on requests for select using (true);
-create policy "anon insert requests" on requests for insert with check (true);
-create policy "anon update requests" on requests for update using (true) with check (true);
-create policy "anon delete requests" on requests for delete using (true);
+create policy "anon read requesters" on stock_requests.requesters for select using (true);
+create policy "anon insert requesters" on stock_requests.requesters for insert with check (true);
+create policy "anon update requesters" on stock_requests.requesters for update using (true) with check (true);
+create policy "anon delete requesters" on stock_requests.requesters for delete using (true);
+create policy "anon read products" on stock_requests.products for select using (true);
+create policy "anon write products" on stock_requests.products for all using (true) with check (true);
+create policy "anon read requests" on stock_requests.requests for select using (true);
+create policy "anon insert requests" on stock_requests.requests for insert with check (true);
+create policy "anon update requests" on stock_requests.requests for update using (true) with check (true);
+create policy "anon delete requests" on stock_requests.requests for delete using (true);
+
+-- PostgREST only serves schemas it's been granted access to.
+grant usage on schema stock_requests to anon, authenticated;
+grant all on all tables in schema stock_requests to anon, authenticated;
+grant all on all sequences in schema stock_requests to anon, authenticated;
+
+-- One-time manual step (can't be done from SQL): in the Supabase dashboard, go to
+-- Project Settings -> Data API -> "Exposed schemas" and add "stock_requests" to the list
+-- (it starts as just "public"). Without this, PostgREST returns 404 for every request below.
