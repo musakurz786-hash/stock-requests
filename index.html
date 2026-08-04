@@ -567,8 +567,9 @@ async function saveField(id, field, value){
   try{
     await sb('PATCH','requests?id=eq.'+id, payload);
     const row = logRows.find(r=>r.id===id);
+    const wasUnset = field==='transfer_number' && row && !row.transfer_number;
     if(row) Object.assign(row, payload);
-    if(field==='transfer_number' && value){
+    if(field==='transfer_number' && value && wasUnset){
       sendNotification('Stock Transferred — '+(row?row.requester_name:''), {
         'Requester Name': row?row.requester_name:'', 'Product': row?row.product:'', 'Transfer Number': value
       });
