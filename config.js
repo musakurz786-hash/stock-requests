@@ -13,7 +13,7 @@ const CONFIG = {
   // emails whatever fields get posted to it, routed to whichever address the access key was
   // created with. Sign up free, grab the Access Key, paste it below. Leave blank to disable
   // notifications entirely.
-  WEB3FORMS_ACCESS_KEY: '',
+  WEB3FORMS_ACCESS_KEY: 'cb44aeb8-4588-4493-8aaf-0a7ed79bb4a3',
 
   LOGISTICS_EMAIL: 'musa@freedomofmovement.co.za',
 
