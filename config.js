@@ -9,10 +9,17 @@ const CONFIG = {
   SB_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxc2liZWdhY3p1aGdyY2p3aXRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2OTg2MzgsImV4cCI6MjA5NjI3NDYzOH0.IyXcvF3HbPqgdyl2vsFTzXUc8VuUWjgTnyYQMJomzkw',
   SB_SCHEMA: 'stock_requests',
 
+  // Separate free EmailJS account (own 2-template/200-email allowance, independent of the
+  // Staff Allowance app's account) — handles the "request submitted" notification with a
+  // branded template. Template is the account's auto-created "Order Confirmation" template,
+  // repurposed with our own content — see email-template-submitted.html.
+  EMAILJS_PUBLIC_KEY: 'neFl0OLWFDzTuEBLI',
+  EMAILJS_SERVICE_ID: 'service_hee0ini',
+  EMAILJS_TEMPLATE_ID_SUBMITTED: 'template_94xemaq',
+
   // Web3Forms (web3forms.com) — free, no dashboard template to configure or run out of; it just
   // emails whatever fields get posted to it, routed to whichever address the access key was
-  // created with. Sign up free, grab the Access Key, paste it below. Leave blank to disable
-  // notifications entirely.
+  // created with. Still used for the "transfer recorded" notification. Leave blank to disable.
   WEB3FORMS_ACCESS_KEY: 'cb44aeb8-4588-4493-8aaf-0a7ed79bb4a3',
 
   LOGISTICS_EMAIL: 'musa@freedomofmovement.co.za',

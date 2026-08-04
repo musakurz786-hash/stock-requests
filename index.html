@@ -226,6 +226,7 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script>
@@ -423,10 +424,12 @@ async function submitRequest(){
     await sb('POST','requests', rows, {'Prefer':'return=minimal'});
 
     const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
-    sendNotification('Stock Request Submitted — '+name, {
-      'Requester Name': name, 'Department': department||'-', 'Reason': reason,
-      'Request Date': fmtDate(date), 'Items Requested': itemLines
-    });
+    if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
+      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
+        email: CONFIG.LOGISTICS_EMAIL, requester_name: name, department: department||'-',
+        reason, request_date: fmtDate(date), item_lines: itemLines
+      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
+    }
 
     cart = [];
     renderCart();
@@ -864,6 +867,7 @@ async function importHistoryFile(){
 }
 
 // ---------------- INIT ----------------
+if(CONFIG.EMAILJS_PUBLIC_KEY && window.emailjs) emailjs.init({publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
 document.getElementById('reqDate').value = todayIso();
 (async function init(){
   try{ await loadRequesters(); }catch(e){ console.error(e); toast('Could not load requesters list', true); }
