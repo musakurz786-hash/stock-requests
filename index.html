@@ -99,10 +99,11 @@
   <div id="view-request" class="view active">
     <div class="row-flex">
       <div class="field"><label>Date</label><input type="date" id="reqDate"></div>
-      <div class="field"><label>Requester Name</label><input type="text" id="reqName" list="requesterNames" placeholder="Your name"></div>
+      <div class="field"><label>Requester Name</label>
+        <select id="reqName" onchange="onReqNameChange()"><option value="">Select your name...</option></select>
+      </div>
       <div class="field"><label>Department</label><input type="text" id="reqDept" list="departmentNames" placeholder="e.g. Marketing, Buying"></div>
     </div>
-    <datalist id="requesterNames"></datalist>
     <datalist id="departmentNames"></datalist>
 
     <div class="field">
@@ -140,7 +141,7 @@
   <div id="view-mine" class="view">
     <div class="field">
       <label>Requester Name</label>
-      <input type="text" id="mineName" list="requesterNames" placeholder="Your name" oninput="loadMyRequestsDebounced()">
+      <select id="mineName" onchange="loadMyRequests()"><option value="">Select your name...</option></select>
     </div>
     <div id="mineList"></div>
   </div>
@@ -320,10 +321,24 @@ let REQUESTERS = [];
 let PRODUCTS = [];
 
 async function loadRequesters(){
+  const prevReq = document.getElementById('reqName').value;
+  const prevMine = document.getElementById('mineName').value;
   REQUESTERS = await sb('GET','requesters?select=*&order=name.asc');
-  document.getElementById('requesterNames').innerHTML = REQUESTERS.map(r=>'<option value="'+escapeHtml(r.name)+'">').join('');
+  const opts = '<option value="">Select your name...</option>' +
+    REQUESTERS.map(r=>'<option value="'+escapeHtml(r.name)+'">'+escapeHtml(r.name)+'</option>').join('');
+  document.getElementById('reqName').innerHTML = opts;
+  document.getElementById('mineName').innerHTML = opts;
+  document.getElementById('reqName').value = prevReq;
+  document.getElementById('mineName').value = prevMine;
   const depts = Array.from(new Set(REQUESTERS.map(r=>r.department).filter(Boolean)));
   document.getElementById('departmentNames').innerHTML = depts.map(d=>'<option value="'+escapeHtml(d)+'">').join('');
+}
+
+function onReqNameChange(){
+  const name = document.getElementById('reqName').value;
+  const r = REQUESTERS.find(x=>x.name===name);
+  if(r && r.department) document.getElementById('reqDept').value = r.department;
+  updateSubmitEnabled();
 }
 
 async function loadProducts(){
@@ -398,7 +413,7 @@ function updateSubmitEnabled(){
   document.getElementById('submitBtn').disabled = !(name && reason && cart.length);
 }
 document.addEventListener('input', e=>{
-  if(['reqName','reqReason'].includes(e.target.id)) updateSubmitEnabled();
+  if(e.target.id === 'reqReason') updateSubmitEnabled();
 });
 
 async function submitRequest(){
@@ -449,12 +464,6 @@ async function submitRequest(){
 }
 
 // ---------------- MY REQUESTS VIEW ----------------
-let mineTimer = null;
-function loadMyRequestsDebounced(){
-  clearTimeout(mineTimer);
-  mineTimer = setTimeout(loadMyRequests, 350);
-}
-
 async function loadMyRequests(){
   const name = document.getElementById('mineName').value.trim();
   const list = document.getElementById('mineList');
