@@ -369,6 +369,9 @@ function addToCart(sku){
   const existing = cart.find(c=>c.sku===sku);
   if(existing){ existing.qty += 1; }
   else{ cart.push({sku:p.sku, product:p.product, qty:1}); }
+  document.getElementById('productSearch').value = '';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('results').innerHTML = '';
   renderCart();
 }
 
