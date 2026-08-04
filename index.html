@@ -265,18 +265,6 @@ function toast(msg, isErr){
   setTimeout(()=>t.className='toast', 3200);
 }
 
-// Notifies LOGISTICS_EMAIL via Web3Forms — no dashboard template to configure, it just emails
-// whatever fields get posted. No-ops silently if WEB3FORMS_ACCESS_KEY isn't set.
-async function sendNotification(subject, fields){
-  if(!CONFIG.WEB3FORMS_ACCESS_KEY) return;
-  try{
-    await fetch('https://api.web3forms.com/submit', {
-      method: 'POST', headers: {'Content-Type':'application/json','Accept':'application/json'},
-      body: JSON.stringify(Object.assign({access_key: CONFIG.WEB3FORMS_ACCESS_KEY, subject}, fields))
-    });
-  }catch(e){ console.error(e); }
-}
-
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function todayIso(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtDate(d){ if(!d) return '-'; return new Date(d+'T00:00:00').toLocaleDateString('en-ZA', {year:'numeric',month:'short',day:'numeric'}); }
@@ -579,13 +567,7 @@ async function saveField(id, field, value){
   try{
     await sb('PATCH','requests?id=eq.'+id, payload);
     const row = logRows.find(r=>r.id===id);
-    const wasUnset = field==='transfer_number' && row && !row.transfer_number;
     if(row) Object.assign(row, payload);
-    if(field==='transfer_number' && value && wasUnset){
-      sendNotification('Stock Transferred — '+(row?row.requester_name:''), {
-        'Requester Name': row?row.requester_name:'', 'Product': row?row.product:'', 'Transfer Number': value
-      });
-    }
     toast('Saved');
   }catch(e){
     console.error(e);
