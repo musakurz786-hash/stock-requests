@@ -15,23 +15,23 @@
   header nav{display:flex;gap:4px;flex-wrap:wrap;}
   header nav button{background:transparent;border:1px solid rgba(28,28,28,.35);color:var(--ink);padding:8px 16px;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;border-radius:2px;}
   header nav button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
-  main{max-width:820px;margin:0 auto;padding:28px 20px 80px;}
+  main{max-width:900px;margin:0 auto;padding:28px 20px 80px;}
   .view{display:none;}
   .view.active{display:block;}
   label{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);margin-bottom:6px;}
-  select,input[type=text],input[type=number],input[type=file],input[type=password],textarea{
+  select,input[type=text],input[type=number],input[type=file],input[type=password],input[type=date],textarea{
     width:100%;padding:11px 12px;font-size:14px;border:1px solid #ccc;border-radius:3px;font-family:inherit;background:#fff;color:var(--ink);
   }
   textarea{resize:vertical;min-height:60px;}
   .field{margin-bottom:18px;}
+  .row-flex{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+  .row-flex .field{flex:1;min-width:140px;margin-bottom:0;}
   .results{border:1px solid var(--line);border-radius:4px;max-height:320px;overflow:auto;margin-bottom:20px;}
   .result-row{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);cursor:pointer;gap:10px;}
   .result-row:last-child{border-bottom:none;}
   .result-row:hover{background:var(--panel);}
   .result-row .name{font-weight:bold;font-size:13px;}
   .result-row .meta{font-size:11px;color:var(--grey);margin-top:2px;}
-  .result-row .avail{font-weight:bold;white-space:nowrap;font-size:12px;color:var(--grey);}
-  .result-row.out .avail{color:var(--bad);}
   .empty{padding:20px;color:var(--grey);font-size:13px;text-align:center;}
   .cart{border:1px solid var(--line);border-radius:4px;margin-bottom:18px;}
   .cart-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);}
@@ -53,28 +53,30 @@
   table.admin th{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--grey);}
   .admin-section{margin-bottom:40px;padding-bottom:32px;border-bottom:1px solid var(--line);}
   .admin-section:last-child{border-bottom:none;}
-  .row-flex{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
-  .row-flex .field{flex:1;min-width:140px;margin-bottom:0;}
   .lock{max-width:320px;margin:80px auto;text-align:center;}
   .subnav{display:flex;gap:4px;margin-bottom:24px;flex-wrap:wrap;}
   .subnav button{background:#fff;border:1px solid #ccc;padding:8px 14px;font-size:12px;border-radius:3px;cursor:pointer;font-family:inherit;}
   .subnav button.active{background:var(--panel);border-color:var(--ink);font-weight:bold;}
+  .filternav{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;}
+  .filternav button{background:#fff;border:1px solid #ccc;padding:6px 12px;font-size:11px;border-radius:20px;cursor:pointer;font-family:inherit;}
+  .filternav button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
   .card{border:1px solid var(--line);border-radius:4px;padding:16px 18px;margin-bottom:16px;}
   .card .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
   .card .card-head .who{font-weight:bold;font-size:14px;}
   .card .card-head .when{font-size:11px;color:var(--grey);}
-  .card .purpose-tag{display:inline-block;background:var(--panel);border-radius:20px;padding:3px 10px;font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--ink);margin-top:4px;}
   .card .note{font-size:12px;color:var(--grey);margin:6px 0 10px;font-style:italic;}
-  .item-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap;}
-  .item-row .iname{font-size:13px;flex:1;min-width:140px;}
-  .item-row .imeta{font-size:11px;color:var(--grey);}
+  .item-block{padding:10px 0;border-top:1px solid var(--line);}
+  .item-block .iname{font-size:13px;font-weight:bold;display:flex;justify-content:space-between;gap:10px;}
+  .item-block .imeta{font-size:11px;color:var(--grey);font-weight:normal;}
+  .logistics-grid{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
+  .logistics-grid .lf{flex:1;min-width:130px;}
+  .logistics-grid .lf label{font-size:9px;margin-bottom:3px;}
+  .logistics-grid input,.logistics-grid select{padding:7px 8px;font-size:12px;}
   .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;letter-spacing:.5px;text-transform:uppercase;font-weight:bold;}
-  .badge.pending{background:#fdf3d8;color:var(--warn);}
-  .badge.approved{background:#e3f0e3;color:var(--good);}
-  .badge.rejected{background:#fbe4e1;color:var(--bad);}
-  .badge.fulfilled{background:#e6e6e6;color:var(--ink);}
-  .qtyin{width:64px;padding:6px 8px;font-size:12px;}
-  select#filterStatus{width:auto;display:inline-block;}
+  .badge.awaiting{background:#fdf3d8;color:var(--warn);}
+  .badge.transferred{background:#e3f0e3;color:var(--good);}
+  .badge.reconciled{background:#e6e6e6;color:var(--ink);}
+  .searchbar{margin-bottom:16px;}
 </style>
 </head>
 <body>
@@ -95,39 +97,39 @@
 
   <!-- NEW REQUEST VIEW -->
   <div id="view-request" class="view active">
+    <div class="row-flex">
+      <div class="field"><label>Date</label><input type="date" id="reqDate"></div>
+      <div class="field"><label>Requester Name</label><input type="text" id="reqName" list="requesterNames" placeholder="Your name"></div>
+      <div class="field"><label>Department</label><input type="text" id="reqDept" list="departmentNames" placeholder="e.g. Marketing, Buying"></div>
+    </div>
+    <datalist id="requesterNames"></datalist>
+    <datalist id="departmentNames"></datalist>
+
     <div class="field">
-      <label>Requester</label>
-      <select id="requesterSelect" onchange="onRequesterChange()">
-        <option value="">Select your name...</option>
-      </select>
+      <label>Reason for Stock Request</label>
+      <textarea id="reqReason" placeholder="e.g. E-commerce Shoot, Replen Summer Campaign, Content..."></textarea>
     </div>
 
     <div class="field">
-      <label>Purpose</label>
-      <select id="purposeSelect">
-        <option value="photoshoot">Photoshoot</option>
-        <option value="gifting_pr">Gifting / PR</option>
-        <option value="event">Event</option>
-        <option value="social_media">Social Media</option>
-        <option value="in_store_display">In-Store Display</option>
-        <option value="other">Other</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label>Notes (optional)</label>
-      <textarea id="requestNote" placeholder="Any extra context for the approver or warehouse..."></textarea>
+      <label>Date Stock Will Be Returned (optional — only if it's a loan)</label>
+      <input type="date" id="reqReturnDate">
     </div>
 
     <div class="field">
       <label>Search Products</label>
-      <input type="text" id="productSearch" placeholder="e.g. Corduroy Overshirt, Tekkie, Vellies..." oninput="onSearch()" disabled>
+      <input type="text" id="productSearch" placeholder="e.g. Corduroy Overshirt, Tekkie, Vellies..." oninput="onSearch()">
     </div>
 
     <div id="results" class="results" style="display:none"></div>
 
+    <div class="row-flex" style="margin-bottom:20px">
+      <div class="field"><label>Or add a custom item — SKU (optional)</label><input type="text" id="customSku"></div>
+      <div class="field" style="flex:2"><label>Product / Description</label><input type="text" id="customProduct"></div>
+      <button class="secondary" onclick="addCustomItem()">Add</button>
+    </div>
+
     <div id="cartWrap" style="display:none">
-      <h2 style="margin-top:24px">Request Cart</h2>
+      <h2>Request Cart</h2>
       <div id="cart" class="cart"></div>
     </div>
 
@@ -137,10 +139,8 @@
   <!-- MY REQUESTS VIEW -->
   <div id="view-mine" class="view">
     <div class="field">
-      <label>Requester</label>
-      <select id="mineSelect" onchange="loadMyRequests()">
-        <option value="">Select your name...</option>
-      </select>
+      <label>Requester Name</label>
+      <input type="text" id="mineName" list="requesterNames" placeholder="Your name" oninput="loadMyRequestsDebounced()">
     </div>
     <div id="mineList"></div>
   </div>
@@ -155,36 +155,53 @@
 
     <div id="manageBody" style="display:none">
       <div class="subnav">
-        <button id="subApprove" class="active" onclick="showSub('approve')">Approve Queue</button>
-        <button id="subFulfil" onclick="showSub('fulfil')">Fulfilment Queue</button>
+        <button id="subLog" class="active" onclick="showSub('log')">Transfer &amp; Recon Log</button>
         <button id="subRequesters" onclick="showSub('requesters')">Requesters</button>
-        <button id="subStock" onclick="showSub('stock')">Stock</button>
-        <button id="subHistory" onclick="showSub('history')">History</button>
+        <button id="subStock" onclick="showSub('stock')">Stock Catalog</button>
       </div>
 
-      <div id="sub-approve" class="subview"></div>
-      <div id="sub-fulfil" class="subview" style="display:none"></div>
+      <div id="sub-log" class="subview">
+        <div class="row-flex searchbar">
+          <div class="field"><input type="text" id="logSearch" placeholder="Search by requester, product, transfer #..." oninput="renderLog()"></div>
+          <button class="secondary" onclick="loadLog()">Refresh</button>
+          <button class="secondary" onclick="exportLogCsv()">Export CSV</button>
+        </div>
+        <div class="filternav">
+          <button class="active" data-f="" onclick="setLogFilter('')">All</button>
+          <button data-f="awaiting" onclick="setLogFilter('awaiting')">Awaiting Transfer</button>
+          <button data-f="transferred" onclick="setLogFilter('transferred')">Transferred</button>
+          <button data-f="reconciled" onclick="setLogFilter('reconciled')">Reconciled</button>
+        </div>
+        <div id="logList"></div>
+
+        <div class="admin-section" style="margin-top:32px">
+          <h2>Import Historical Tracker</h2>
+          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the existing "Marketing Stock Request Sheet" export (.xlsx) to backfill history. Matches columns by header name (Date, Reason, Employee, SKU, Description, Units Requested, Transfer #, Recon Date, Received?, Feedback, Return Transfer) and groups consecutive rows into one request wherever Date/Reason/Employee repeat blank.</p>
+          <input type="file" id="historyFile" accept=".xlsx,.xls">
+          <button class="secondary" style="margin-top:10px" onclick="importHistoryFile()">Import</button>
+          <div id="historyImportStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
+        </div>
+      </div>
 
       <div id="sub-requesters" class="subview" style="display:none">
         <div class="admin-section">
           <h2>Add Requester</h2>
           <div class="row-flex">
             <div class="field"><label>Name</label><input type="text" id="newReqName"></div>
-            <div class="field"><label>Email (optional)</label><input type="text" id="newReqEmail"></div>
             <div class="field"><label>Department (optional)</label><input type="text" id="newReqDept"></div>
             <button class="secondary" onclick="addRequester()">Add</button>
           </div>
         </div>
         <div class="admin-section">
           <h2>Requesters</h2>
-          <table class="admin" id="requestersTable"><thead><tr><th>Name</th><th>Email</th><th>Department</th><th></th></tr></thead><tbody></tbody></table>
+          <table class="admin" id="requestersTable"><thead><tr><th>Name</th><th>Department</th><th></th></tr></thead><tbody></tbody></table>
         </div>
       </div>
 
       <div id="sub-stock" class="subview" style="display:none">
         <div class="admin-section">
           <h2>Import Stock Report</h2>
-          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the "Inventory Products Stock Level Report" export (.xlsx/.csv). Matches by SKU and updates available stock for existing products; new SKUs are added.</p>
+          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the "Inventory Products Stock Level Report" export (.xlsx/.csv) to populate the searchable product catalog used by the request form. Matches by SKU; new SKUs are added.</p>
           <input type="file" id="stockFile" accept=".xlsx,.xls,.csv">
           <button class="secondary" style="margin-top:10px" onclick="importStockFile()">Import</button>
           <div id="importStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
@@ -195,34 +212,10 @@
             <div class="field"><label>SKU</label><input type="text" id="newSku"></div>
             <div class="field"><label>Product</label><input type="text" id="newProduct"></div>
             <div class="field"><label>Category</label><input type="text" id="newCategory"></div>
-            <div class="field"><label>Available Qty</label><input type="number" id="newAvailable" value="0"></div>
             <button class="secondary" onclick="upsertProduct()">Save</button>
           </div>
-          <input type="text" id="stockSearch" placeholder="Search by product name or SKU to edit available qty..." oninput="onStockSearch()">
+          <input type="text" id="stockSearch" placeholder="Search by product name or SKU..." oninput="onStockSearch()">
           <div id="stockResults" class="results" style="display:none;margin-top:10px"></div>
-        </div>
-      </div>
-
-      <div id="sub-history" class="subview" style="display:none">
-        <div class="admin-section">
-          <div class="row-flex" style="margin-bottom:14px">
-            <div class="field">
-              <label>Filter Status</label>
-              <select id="filterStatus" onchange="loadHistory()">
-                <option value="">All</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="rejected">Rejected</option>
-                <option value="fulfilled">Fulfilled</option>
-              </select>
-            </div>
-            <button class="secondary" onclick="loadHistory()">Refresh</button>
-            <button class="secondary" onclick="exportHistoryCsv()">Export CSV</button>
-          </div>
-          <table class="admin" id="historyTable">
-            <thead><tr><th>Date</th><th>Requester</th><th>Dept</th><th>Purpose</th><th>Product</th><th>Qty Req</th><th>Qty Appr</th><th>Status</th><th></th></tr></thead>
-            <tbody></tbody>
-          </table>
         </div>
       </div>
 
@@ -238,11 +231,6 @@
 <script src="config.js"></script>
 <script>
 const SBH = {'apikey':CONFIG.SB_KEY,'Authorization':'Bearer '+CONFIG.SB_KEY,'Content-Type':'application/json'};
-
-const PURPOSE_LABELS = {
-  photoshoot:'Photoshoot', gifting_pr:'Gifting / PR', event:'Event',
-  social_media:'Social Media', in_store_display:'In-Store Display', other:'Other'
-};
 
 async function sb(method, path, body, headers){
   const r = await fetch(CONFIG.SB_URL+'/rest/v1/'+path, {
@@ -276,8 +264,8 @@ function toast(msg, isErr){
 }
 
 function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-function fmtDate(d){ return new Date(d).toLocaleDateString('en-ZA', {year:'numeric',month:'short',day:'numeric'}); }
+function todayIso(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function fmtDate(d){ if(!d) return '-'; return new Date(d+'T00:00:00').toLocaleDateString('en-ZA', {year:'numeric',month:'short',day:'numeric'}); }
 
 function uuid(){
   if(crypto.randomUUID) return crypto.randomUUID();
@@ -296,30 +284,41 @@ function showView(name){
   if(name==='manage' && sessionStorage.getItem('srManage')==='1') showManageBody();
 }
 
+function computeStatus(r){
+  if(!r.transfer_number) return 'awaiting';
+  if(r.feedback || r.return_transfer_number) return 'reconciled';
+  return 'transferred';
+}
+function statusBadge(status){
+  const labels = {awaiting:'Awaiting Transfer', transferred:'Transferred', reconciled:'Reconciled'};
+  return '<span class="badge '+status+'">'+labels[status]+'</span>';
+}
+function groupByBatch(rows){
+  const map = new Map();
+  rows.forEach(r=>{
+    if(!map.has(r.batch_id)) map.set(r.batch_id, []);
+    map.get(r.batch_id).push(r);
+  });
+  return Array.from(map.values()).sort((a,b)=> new Date(b[0].request_date) - new Date(a[0].request_date));
+}
+
 // ---------------- SHARED DATA ----------------
 let REQUESTERS = [];
 let PRODUCTS = [];
 
 async function loadRequesters(){
   REQUESTERS = await sb('GET','requesters?select=*&order=name.asc');
-  const opts = '<option value="">Select your name...</option>' + REQUESTERS.map(r=>'<option value="'+escapeHtml(r.name)+'">'+escapeHtml(r.name)+'</option>').join('');
-  document.getElementById('requesterSelect').innerHTML = opts;
-  document.getElementById('mineSelect').innerHTML = opts;
+  document.getElementById('requesterNames').innerHTML = REQUESTERS.map(r=>'<option value="'+escapeHtml(r.name)+'">').join('');
+  const depts = Array.from(new Set(REQUESTERS.map(r=>r.department).filter(Boolean)));
+  document.getElementById('departmentNames').innerHTML = depts.map(d=>'<option value="'+escapeHtml(d)+'">').join('');
 }
 
 async function loadProducts(){
   PRODUCTS = await sbAll('products?select=*&order=product.asc');
-  document.getElementById('productSearch').disabled = false;
 }
 
 // ---------------- NEW REQUEST VIEW ----------------
-let selectedRequester = null;
-let cart = []; // {sku, product, category, qty}
-
-function onRequesterChange(){
-  selectedRequester = document.getElementById('requesterSelect').value || null;
-  updateSubmitEnabled();
-}
+let cart = []; // {sku, product, qty}
 
 function onSearch(){
   const q = document.getElementById('productSearch').value.trim().toLowerCase();
@@ -328,34 +327,40 @@ function onSearch(){
   const matches = PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,100);
   results.style.display='block';
   if(!matches.length){ results.innerHTML = '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
-  results.innerHTML = matches.map(p => {
-    const out = Number(p.available) <= 0;
-    return '<div class="result-row'+(out?' out':'')+'" onclick="addToCart(\''+p.sku.replace(/'/g,"\\'")+'\')">'+
+  results.innerHTML = matches.map(p =>
+    '<div class="result-row" onclick="addToCart(\''+p.sku.replace(/'/g,"\\'")+'\')">'+
       '<div><div class="name">'+escapeHtml(p.product)+'</div>'+
       '<div class="meta">SKU '+escapeHtml(p.sku)+' &middot; '+escapeHtml(p.category||'')+'</div></div>'+
-      '<div class="avail">'+(out?'Out of stock':Math.floor(p.available)+' available')+'</div></div>';
-  }).join('');
+    '</div>'
+  ).join('');
 }
 
 function addToCart(sku){
-  if(!selectedRequester){ toast('Select your name first', true); return; }
   const p = PRODUCTS.find(x=>x.sku===sku);
   if(!p) return;
   const existing = cart.find(c=>c.sku===sku);
   if(existing){ existing.qty += 1; }
-  else{ cart.push({sku:p.sku, product:p.product, category:p.category, available:p.available, qty:1}); }
+  else{ cart.push({sku:p.sku, product:p.product, qty:1}); }
   renderCart();
 }
 
-function updateCartQty(sku, qty){
-  const item = cart.find(c=>c.sku===sku);
-  if(!item) return;
-  item.qty = Math.max(1, parseInt(qty)||1);
+function addCustomItem(){
+  const sku = document.getElementById('customSku').value.trim();
+  const product = document.getElementById('customProduct').value.trim();
+  if(!product){ toast('Enter a product name first', true); return; }
+  cart.push({sku: sku||null, product, qty:1});
+  document.getElementById('customSku').value = '';
+  document.getElementById('customProduct').value = '';
+  renderCart();
+}
+
+function updateCartQty(idx, qty){
+  cart[idx].qty = Math.max(1, parseInt(qty)||1);
   updateSubmitEnabled();
 }
 
-function removeFromCart(sku){
-  cart = cart.filter(c=>c.sku!==sku);
+function removeFromCart(idx){
+  cart.splice(idx,1);
   renderCart();
 }
 
@@ -364,54 +369,63 @@ function renderCart(){
   const cartEl = document.getElementById('cart');
   if(!cart.length){ wrap.style.display='none'; cartEl.innerHTML=''; updateSubmitEnabled(); return; }
   wrap.style.display='block';
-  cartEl.innerHTML = cart.map(c=>{
-    const out = Number(c.available) <= 0;
-    return '<div class="cart-row">'+
-      '<div class="name">'+escapeHtml(c.product)+'<div class="meta">SKU '+escapeHtml(c.sku)+(out?' &middot; <span style="color:var(--bad)">out of stock</span>':'')+'</div></div>'+
-      '<input type="number" min="1" value="'+c.qty+'" onchange="updateCartQty(\''+c.sku.replace(/'/g,"\\'")+'\', this.value)">'+
-      '<button class="rm" onclick="removeFromCart(\''+c.sku.replace(/'/g,"\\'")+'\')" title="Remove">&times;</button>'+
-    '</div>';
-  }).join('');
+  cartEl.innerHTML = cart.map((c,idx)=>
+    '<div class="cart-row">'+
+      '<div class="name">'+escapeHtml(c.product)+(c.sku?'<div class="meta">SKU '+escapeHtml(c.sku)+'</div>':'')+'</div>'+
+      '<input type="number" min="1" value="'+c.qty+'" onchange="updateCartQty('+idx+', this.value)">'+
+      '<button class="rm" onclick="removeFromCart('+idx+')" title="Remove">&times;</button>'+
+    '</div>'
+  ).join('');
   updateSubmitEnabled();
 }
 
 function updateSubmitEnabled(){
-  document.getElementById('submitBtn').disabled = !(selectedRequester && cart.length);
+  const name = document.getElementById('reqName').value.trim();
+  const reason = document.getElementById('reqReason').value.trim();
+  document.getElementById('submitBtn').disabled = !(name && reason && cart.length);
 }
+document.addEventListener('input', e=>{
+  if(['reqName','reqReason'].includes(e.target.id)) updateSubmitEnabled();
+});
 
 async function submitRequest(){
-  if(!selectedRequester || !cart.length) return;
+  const name = document.getElementById('reqName').value.trim();
+  const department = document.getElementById('reqDept').value.trim();
+  const reason = document.getElementById('reqReason').value.trim();
+  const date = document.getElementById('reqDate').value || todayIso();
+  const returnDate = document.getElementById('reqReturnDate').value || null;
+  if(!name || !reason || !cart.length) return;
+
   const btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = 'Submitting...';
-
-  const requesterRow = REQUESTERS.find(r=>r.name===selectedRequester);
-  const purpose = document.getElementById('purposeSelect').value;
-  const note = document.getElementById('requestNote').value.trim();
   const batch_id = uuid();
 
   try{
+    if(!REQUESTERS.find(r=>r.name===name)){
+      await sb('POST','requesters', {name, department: department||null}, {'Prefer':'resolution=merge-duplicates,return=minimal'});
+    }
     const rows = cart.map(c => ({
-      batch_id, requester_name: selectedRequester, department: requesterRow ? requesterRow.department : null,
-      purpose, note: note || null, sku: c.sku, product: c.product, qty_requested: c.qty, status: 'pending'
+      batch_id, request_date: date, requester_name: name, department: department||null,
+      reason, expected_return_date: returnDate, sku: c.sku, product: c.product, qty: c.qty
     }));
     await sb('POST','requests', rows, {'Prefer':'return=minimal'});
 
     if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
       const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
-      const toList = [requesterRow && requesterRow.email, CONFIG.APPROVER_EMAIL].filter((v,i,a)=>v && a.indexOf(v)===i).join(', ');
       await emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
-        to_email: toList, email: toList, requester_name: selectedRequester,
-        purpose: PURPOSE_LABELS[purpose]||purpose, note: note||'-', item_lines: itemLines,
-        request_date: new Date().toLocaleDateString('en-ZA', {year:'numeric',month:'long',day:'numeric'})
+        to_email: CONFIG.LOGISTICS_EMAIL, email: CONFIG.LOGISTICS_EMAIL, requester_name: name,
+        department: department||'-', reason, request_date: fmtDate(date), item_lines: itemLines
       }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
     }
 
     cart = [];
     renderCart();
-    document.getElementById('requestNote').value = '';
+    document.getElementById('reqReason').value = '';
+    document.getElementById('reqReturnDate').value = '';
     document.getElementById('productSearch').value = '';
     document.getElementById('results').style.display = 'none';
-    toast('Request submitted — the approver has been notified.');
+    await loadRequesters();
+    toast('Request submitted.');
   }catch(e){
     console.error(e);
     toast('Something went wrong submitting the request', true);
@@ -422,38 +436,33 @@ async function submitRequest(){
 }
 
 // ---------------- MY REQUESTS VIEW ----------------
-function groupByBatch(rows){
-  const map = new Map();
-  rows.forEach(r=>{
-    if(!map.has(r.batch_id)) map.set(r.batch_id, []);
-    map.get(r.batch_id).push(r);
-  });
-  return Array.from(map.values()).sort((a,b)=> new Date(b[0].created_at) - new Date(a[0].created_at));
-}
-
-function statusBadge(status){
-  return '<span class="badge '+status+'">'+status+'</span>';
+let mineTimer = null;
+function loadMyRequestsDebounced(){
+  clearTimeout(mineTimer);
+  mineTimer = setTimeout(loadMyRequests, 350);
 }
 
 async function loadMyRequests(){
-  const name = document.getElementById('mineSelect').value;
+  const name = document.getElementById('mineName').value.trim();
   const list = document.getElementById('mineList');
   if(!name){ list.innerHTML=''; return; }
   list.innerHTML = '<div class="empty">Loading...</div>';
-  const rows = await sb('GET','requests?select=*&requester_name=eq.'+encodeURIComponent(name)+'&order=created_at.desc&limit=300');
+  const rows = await sb('GET','requests?select=*&requester_name=eq.'+encodeURIComponent(name)+'&order=request_date.desc&limit=300');
   if(!rows.length){ list.innerHTML = '<div class="empty">No requests yet.</div>'; return; }
   const batches = groupByBatch(rows);
   list.innerHTML = batches.map(items=>{
     const head = items[0];
     const itemsHtml = items.map(i=>
-      '<div class="item-row"><div class="iname">'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty_requested+
-      (i.status==='approved'||i.status==='fulfilled' ? (i.qty_approved!=null && i.qty_approved!==i.qty_requested ? ' (approved x'+i.qty_approved+')' : '') : '')+
-      '</span></div><div>'+statusBadge(i.status)+'</div></div>'
+      '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
+      statusBadge(computeStatus(i))+'</div>'+
+      (i.transfer_number ? '<div class="imeta">Transfer '+escapeHtml(i.transfer_number)+(i.date_completed?' &middot; '+fmtDate(i.date_completed):'')+'</div>' : '')+
+      (i.feedback ? '<div class="imeta">'+escapeHtml(i.feedback)+'</div>' : '')+
+      '</div>'
     ).join('');
-    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+'</div>'+
-      '<span class="purpose-tag">'+(PURPOSE_LABELS[head.purpose]||head.purpose)+'</span></div>'+
-      '<div class="when">'+fmtDate(head.created_at)+'</div></div>'+
-      (head.note ? '<div class="note">'+escapeHtml(head.note)+'</div>' : '')+
+    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
+      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
+      '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       itemsHtml+'</div>';
   }).join('');
 }
@@ -471,155 +480,120 @@ function tryManageUnlock(){
 function showManageBody(){
   document.getElementById('manageLock').style.display = 'none';
   document.getElementById('manageBody').style.display = 'block';
-  showSub('approve');
+  showSub('log');
 }
 
 function showSub(name){
-  ['approve','fulfil','requesters','stock','history'].forEach(s=>{
+  ['log','requesters','stock'].forEach(s=>{
     document.getElementById('sub-'+s).style.display = (s===name?'block':'none');
     document.getElementById('sub'+s[0].toUpperCase()+s.slice(1)).classList.toggle('active', s===name);
   });
-  if(name==='approve') loadApproveQueue();
-  if(name==='fulfil') loadFulfilQueue();
+  if(name==='log') loadLog();
   if(name==='requesters') loadRequestersTable();
-  if(name==='history') loadHistory();
 }
 
-// -- Approve Queue --
-async function loadApproveQueue(){
-  const el = document.getElementById('sub-approve');
-  el.innerHTML = '<div class="empty">Loading...</div>';
-  const rows = await sb('GET','requests?select=*&status=eq.pending&order=created_at.asc');
-  if(!rows.length){ el.innerHTML = '<div class="empty">No pending requests.</div>'; return; }
+// -- Transfer & Recon Log --
+let logRows = [];
+let logFilter = '';
+
+function setLogFilter(f){
+  logFilter = f;
+  document.querySelectorAll('.filternav button').forEach(b=>b.classList.toggle('active', b.dataset.f===f));
+  renderLog();
+}
+
+async function loadLog(){
+  document.getElementById('logList').innerHTML = '<div class="empty">Loading...</div>';
+  logRows = await sb('GET','requests?select=*&order=request_date.desc&limit=2000');
+  renderLog();
+}
+
+function renderLog(){
+  const q = document.getElementById('logSearch').value.trim().toLowerCase();
+  let rows = logRows;
+  if(logFilter) rows = rows.filter(r=>computeStatus(r)===logFilter);
+  if(q) rows = rows.filter(r =>
+    (r.requester_name||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) ||
+    (r.transfer_number||'').toLowerCase().includes(q) || (r.reason||'').toLowerCase().includes(q) ||
+    (r.return_transfer_number||'').toLowerCase().includes(q));
+  const el = document.getElementById('logList');
+  if(!rows.length){ el.innerHTML = '<div class="empty">No matching requests.</div>'; return; }
   const batches = groupByBatch(rows);
   el.innerHTML = batches.map(items=>{
     const head = items[0];
     const itemsHtml = items.map(i=>
-      '<div class="item-row"><div class="iname">'+escapeHtml(i.product)+' <span class="imeta">requested x'+i.qty_requested+'</span></div>'+
-      '<div style="display:flex;gap:6px;align-items:center">'+
-      '<input type="number" class="qtyin" id="qtyApprove-'+i.id+'" min="0" value="'+i.qty_requested+'">'+
-      '<button class="secondary small" onclick="approveItem('+i.id+')">Approve</button>'+
-      '<button class="secondary small" onclick="rejectItem('+i.id+')">Reject</button>'+
-      '</div></div>'
+      '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+(i.sku?' &middot; SKU '+escapeHtml(i.sku):'')+'</span></span>'+
+      statusBadge(computeStatus(i))+'</div>'+
+      '<div class="logistics-grid">'+
+        '<div class="lf"><label>Transfer #</label><input type="text" value="'+escapeHtml(i.transfer_number||'')+'" onblur="saveField('+i.id+',\'transfer_number\',this.value)"></div>'+
+        '<div class="lf"><label>Date Completed</label><input type="date" value="'+(i.date_completed||'')+'" onchange="saveField('+i.id+',\'date_completed\',this.value)"></div>'+
+        '<div class="lf"><label>Recon Date</label><input type="date" value="'+(i.recon_date||'')+'" onchange="saveField('+i.id+',\'recon_date\',this.value)"></div>'+
+        '<div class="lf"><label>Received?</label><select onchange="saveField('+i.id+',\'received\',this.value)">'+
+          '<option value=""'+(i.received==null?' selected':'')+'>-</option>'+
+          '<option value="true"'+(i.received===true?' selected':'')+'>Yes</option>'+
+          '<option value="false"'+(i.received===false?' selected':'')+'>No</option>'+
+        '</select></div>'+
+        '<div class="lf"><label>Feedback</label><input type="text" list="feedbackOptions" value="'+escapeHtml(i.feedback||'')+'" onblur="saveField('+i.id+',\'feedback\',this.value)"></div>'+
+        '<div class="lf"><label>Return Transfer #</label><input type="text" value="'+escapeHtml(i.return_transfer_number||'')+'" onblur="saveField('+i.id+',\'return_transfer_number\',this.value)"></div>'+
+      '</div>'+
+      '<div style="margin-top:6px"><button class="secondary small" onclick="deleteRequestRow('+i.id+')">Delete</button></div>'+
+      '</div>'
     ).join('');
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
-      (head.department ? ' <span class="imeta">('+escapeHtml(head.department)+')</span>' : '')+'</div>'+
-      '<span class="purpose-tag">'+(PURPOSE_LABELS[head.purpose]||head.purpose)+'</span></div>'+
-      '<div class="when">'+fmtDate(head.created_at)+' &middot; <button class="secondary small" onclick="approveAllInBatch(\''+head.batch_id+'\')">Approve All</button></div></div>'+
-      (head.note ? '<div class="note">'+escapeHtml(head.note)+'</div>' : '')+
+      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
+      '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       itemsHtml+'</div>';
-  }).join('');
+  }).join('') + '<datalist id="feedbackOptions"><option value="Returned to Stock"><option value="Transferred to rejects"><option value="Reject"></datalist>';
 }
 
-async function emailDecision(item, status, reason){
-  if(!(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_DECIDED)) return;
-  const requester = REQUESTERS.find(r=>r.name===item.requester_name);
-  const toList = [requester && requester.email, CONFIG.APPROVER_EMAIL].filter((v,i,a)=>v && a.indexOf(v)===i).join(', ');
+async function saveField(id, field, value){
+  let payload;
+  if(field === 'received') payload = {received: value===''? null : value==='true'};
+  else payload = {[field]: value || null};
   try{
-    await emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_DECIDED, {
-      to_email: toList, email: toList, requester_name: item.requester_name, product: item.product,
-      qty: status==='approved' ? item.qty_approved : item.qty_requested, status, reason: reason||'-'
-    }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
-  }catch(e){ console.error(e); }
-}
-
-async function approveItem(id){
-  const input = document.getElementById('qtyApprove-'+id);
-  const qty = Math.max(0, parseInt(input.value)||0);
-  try{
-    const rows = await sb('GET','requests?select=*&id=eq.'+id);
-    const item = rows[0];
-    await sb('PATCH','requests?id=eq.'+id, {status:'approved', qty_approved: qty, approved_at: new Date().toISOString()});
-    item.qty_approved = qty;
-    emailDecision(item, 'approved');
-    toast('Approved');
-    loadApproveQueue();
-  }catch(e){
-    console.error(e);
-    toast('Could not approve this item', true);
-  }
-}
-
-async function rejectItem(id){
-  const reason = prompt('Reason for rejecting this item (optional):') || '';
-  try{
-    const rows = await sb('GET','requests?select=*&id=eq.'+id);
-    const item = rows[0];
-    await sb('PATCH','requests?id=eq.'+id, {status:'rejected', rejected_reason: reason || null, approved_at: new Date().toISOString()});
-    emailDecision(item, 'rejected', reason);
-    toast('Rejected');
-    loadApproveQueue();
-  }catch(e){
-    console.error(e);
-    toast('Could not reject this item', true);
-  }
-}
-
-async function approveAllInBatch(batchId){
-  const rows = await sb('GET','requests?select=*&batch_id=eq.'+batchId+'&status=eq.pending');
-  for(const r of rows){
-    await sb('PATCH','requests?id=eq.'+r.id, {status:'approved', qty_approved: r.qty_requested, approved_at: new Date().toISOString()});
-    r.qty_approved = r.qty_requested;
-    emailDecision(r, 'approved');
-  }
-  toast('All items approved');
-  loadApproveQueue();
-}
-
-// -- Fulfilment Queue --
-async function loadFulfilQueue(){
-  const el = document.getElementById('sub-fulfil');
-  el.innerHTML = '<div class="empty">Loading...</div>';
-  const rows = await sb('GET','requests?select=*&status=eq.approved&order=approved_at.asc');
-  if(!rows.length){ el.innerHTML = '<div class="empty">Nothing waiting on fulfilment.</div>'; return; }
-  const batches = groupByBatch(rows);
-  el.innerHTML = batches.map(items=>{
-    const head = items[0];
-    const itemsHtml = items.map(i=>{
-      const p = PRODUCTS.find(x=>x.sku===i.sku);
-      const avail = p ? Number(p.available) : null;
-      const short = avail!=null && avail < i.qty_approved;
-      return '<div class="item-row"><div class="iname">'+escapeHtml(i.product)+' <span class="imeta">approved x'+i.qty_approved+
-        (avail!=null ? ' &middot; '+avail+' in stock'+(short?' <span style="color:var(--bad)">(short)</span>':'') : '')+'</span></div>'+
-        '<button class="secondary small" onclick="markFulfilled('+i.id+')">Mark Fulfilled</button></div>';
-    }).join('');
-    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
-      (head.department ? ' <span class="imeta">('+escapeHtml(head.department)+')</span>' : '')+'</div>'+
-      '<span class="purpose-tag">'+(PURPOSE_LABELS[head.purpose]||head.purpose)+'</span></div>'+
-      '<div class="when">approved '+fmtDate(head.approved_at)+' &middot; <button class="secondary small" onclick="fulfilAllInBatch(\''+head.batch_id+'\')">Fulfil All</button></div></div>'+
-      itemsHtml+'</div>';
-  }).join('');
-}
-
-async function markFulfilled(id){
-  try{
-    const rows = await sb('GET','requests?select=*&id=eq.'+id);
-    const item = rows[0];
-    const p = PRODUCTS.find(x=>x.sku===item.sku);
-    if(p){
-      const newAvailable = Number(p.available) - Number(item.qty_approved);
-      await sb('PATCH','products?sku=eq.'+encodeURIComponent(item.sku), {available: newAvailable, updated_at: new Date().toISOString()});
-      p.available = newAvailable;
-    }
-    await sb('PATCH','requests?id=eq.'+id, {status:'fulfilled', fulfilled_at: new Date().toISOString()});
-    if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_FULFILLED){
-      const requester = REQUESTERS.find(r=>r.name===item.requester_name);
-      const toList = [requester && requester.email, CONFIG.WAREHOUSE_EMAIL].filter((v,i,a)=>v && a.indexOf(v)===i).join(', ');
-      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_FULFILLED, {
-        to_email: toList, email: toList, requester_name: item.requester_name, product: item.product, qty: item.qty_approved
+    await sb('PATCH','requests?id=eq.'+id, payload);
+    const row = logRows.find(r=>r.id===id);
+    if(row) Object.assign(row, payload);
+    if(field==='transfer_number' && value && CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_TRANSFERRED){
+      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_TRANSFERRED, {
+        to_email: CONFIG.LOGISTICS_EMAIL, email: CONFIG.LOGISTICS_EMAIL, requester_name: row?row.requester_name:'',
+        product: row?row.product:'', transfer_number: value
       }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
     }
-    toast('Marked fulfilled');
-    loadFulfilQueue();
+    toast('Saved');
   }catch(e){
     console.error(e);
-    toast('Could not mark this item fulfilled', true);
+    toast('Could not save that change', true);
   }
 }
 
-async function fulfilAllInBatch(batchId){
-  const rows = await sb('GET','requests?select=*&batch_id=eq.'+batchId+'&status=eq.approved');
-  for(const r of rows){ await markFulfilled(r.id); }
+async function deleteRequestRow(id){
+  if(!confirm('Delete this request line permanently?')) return;
+  try{
+    await sb('DELETE','requests?id=eq.'+id, null, {'Prefer':'return=minimal'});
+    logRows = logRows.filter(r=>r.id!==id);
+    renderLog();
+    toast('Deleted');
+  }catch(e){
+    console.error(e);
+    toast('Could not delete this request', true);
+  }
+}
+
+function exportLogCsv(){
+  const header = ['Request Date','Requester','Department','Reason','Expected Return','SKU','Product','Qty',
+    'Transfer #','Date Completed','Recon Date','Received','Feedback','Return Transfer #'];
+  const lines = [header.join(',')];
+  logRows.forEach(r=>{
+    lines.push([r.request_date, r.requester_name, r.department||'', '"'+String(r.reason).replace(/"/g,'""')+'"',
+      r.expected_return_date||'', r.sku||'', '"'+String(r.product).replace(/"/g,'""')+'"', r.qty,
+      r.transfer_number||'', r.date_completed||'', r.recon_date||'', r.received==null?'':(r.received?'Yes':'No'),
+      r.feedback||'', r.return_transfer_number||''].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'stock-requests-log.csv'; a.click();
 }
 
 // -- Requesters --
@@ -627,26 +601,21 @@ async function loadRequestersTable(){
   const rows = await sb('GET','requesters?select=*&order=name.asc');
   const tbody = document.querySelector('#requestersTable tbody');
   tbody.innerHTML = rows.map(r=>{
-    const emailInput = '<input type="text" value="'+escapeHtml(r.email||'')+'" placeholder="name@freedomofmovement.co.za" '+
-      'style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #ccc;border-radius:3px" '+
-      'onblur="saveRequesterField(\''+r.name.replace(/'/g,"\\'")+'\', \'email\', this.value)">';
     const deptInput = '<input type="text" value="'+escapeHtml(r.department||'')+'" '+
       'style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #ccc;border-radius:3px" '+
-      'onblur="saveRequesterField(\''+r.name.replace(/'/g,"\\'")+'\', \'department\', this.value)">';
-    return '<tr><td>'+escapeHtml(r.name)+'</td><td>'+emailInput+'</td><td>'+deptInput+'</td>'+
+      'onblur="saveRequesterField(\''+r.name.replace(/'/g,"\\'")+'\', this.value)">';
+    return '<tr><td>'+escapeHtml(r.name)+'</td><td>'+deptInput+'</td>'+
       '<td><button class="secondary small" onclick="deleteRequester(\''+r.name.replace(/'/g,"\\'")+'\')">Remove</button></td></tr>';
   }).join('');
 }
 
 async function addRequester(){
   const name = document.getElementById('newReqName').value.trim();
-  const email = document.getElementById('newReqEmail').value.trim();
   const department = document.getElementById('newReqDept').value.trim();
   if(!name){ toast('Enter a name first', true); return; }
   try{
-    await sb('POST','requesters', {name, email: email||null, department: department||null}, {'Prefer':'return=minimal'});
+    await sb('POST','requesters', {name, department: department||null}, {'Prefer':'return=minimal'});
     document.getElementById('newReqName').value = '';
-    document.getElementById('newReqEmail').value = '';
     document.getElementById('newReqDept').value = '';
     await loadRequesters();
     loadRequestersTable();
@@ -657,12 +626,12 @@ async function addRequester(){
   }
 }
 
-async function saveRequesterField(name, field, value){
+async function saveRequesterField(name, value){
   value = value.trim();
   try{
-    await sb('PATCH','requesters?name=eq.'+encodeURIComponent(name), {[field]: value || null});
+    await sb('PATCH','requesters?name=eq.'+encodeURIComponent(name), {department: value || null});
     const r = REQUESTERS.find(x=>x.name===name);
-    if(r) r[field] = value;
+    if(r) r.department = value;
     toast('Saved');
   }catch(e){
     console.error(e);
@@ -671,7 +640,7 @@ async function saveRequesterField(name, field, value){
 }
 
 async function deleteRequester(name){
-  if(!confirm('Remove '+name+' from the requesters list? Their past requests stay in history.')) return;
+  if(!confirm('Remove '+name+' from the requesters list? Their past requests stay in the log.')) return;
   try{
     await sb('DELETE','requesters?name=eq.'+encodeURIComponent(name), null, {'Prefer':'return=minimal'});
     await loadRequesters();
@@ -683,7 +652,7 @@ async function deleteRequester(name){
   }
 }
 
-// -- Stock --
+// -- Stock catalog --
 async function importStockFile(){
   const input = document.getElementById('stockFile');
   const status = document.getElementById('importStatus');
@@ -701,7 +670,6 @@ async function importStockFile(){
   const skuCol = header.indexOf('sku');
   const productCol = header.indexOf('product');
   const catCol = header.indexOf('category');
-  const availCol = header.indexOf('available') >= 0 ? header.indexOf('available') : header.indexOf('stock on hand');
 
   const existingBySku = {};
   PRODUCTS.forEach(p => existingBySku[p.sku] = p);
@@ -712,11 +680,10 @@ async function importStockFile(){
     const sku = r[skuCol] ? String(r[skuCol]).trim() : '';
     if(!sku) continue;
     const existing = existingBySku[sku];
-    const available = availCol >= 0 ? Number(r[availCol])||0 : (existing? existing.available : 0);
     updates.push({
       sku, product: (r[productCol]||(existing?existing.product:'')),
       category: catCol>=0 ? (r[catCol]||(existing?existing.category:null)) : (existing?existing.category:null),
-      subcat: existing?existing.subcat:null, available, updated_at: new Date().toISOString()
+      subcat: existing?existing.subcat:null, updated_at: new Date().toISOString()
     });
   }
 
@@ -736,15 +703,13 @@ async function upsertProduct(){
   const sku = document.getElementById('newSku').value.trim();
   const product = document.getElementById('newProduct').value.trim();
   const category = document.getElementById('newCategory').value.trim();
-  const available = Number(document.getElementById('newAvailable').value) || 0;
   if(!sku || !product){ toast('SKU and product name are required', true); return; }
   try{
-    await sb('POST','products', {sku, product, category: category||null, available, updated_at: new Date().toISOString()},
+    await sb('POST','products', {sku, product, category: category||null, updated_at: new Date().toISOString()},
       {'Prefer':'resolution=merge-duplicates,return=minimal'});
     document.getElementById('newSku').value = '';
     document.getElementById('newProduct').value = '';
     document.getElementById('newCategory').value = '';
-    document.getElementById('newAvailable').value = '0';
     await loadProducts();
     toast('Product saved');
   }catch(e){
@@ -762,86 +727,136 @@ function onStockSearch(){
   if(!matches.length){ results.innerHTML = '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
   results.innerHTML = matches.map(p =>
     '<div class="result-row" style="cursor:default">'+
-      '<div><div class="name">'+escapeHtml(p.product)+'</div><div class="meta">SKU '+escapeHtml(p.sku)+'</div></div>'+
-      '<div class="row-flex" style="gap:6px">'+
-        '<input type="number" step="1" value="'+p.available+'" id="availInput'+p.sku+'" style="width:90px;padding:8px">'+
-        '<button class="secondary small" onclick="saveAvailEdit(\''+p.sku.replace(/'/g,"\\'")+'\')">Save</button>'+
-      '</div>'+
+      '<div><div class="name">'+escapeHtml(p.product)+'</div><div class="meta">SKU '+escapeHtml(p.sku)+' &middot; '+escapeHtml(p.category||'')+'</div></div>'+
     '</div>'
   ).join('');
 }
 
-async function saveAvailEdit(sku){
-  const input = document.getElementById('availInput'+sku);
-  const newAvail = Number(input.value);
-  if(!(newAvail >= 0)){ toast('Enter a valid quantity', true); return; }
-  try{
-    await sb('PATCH','products?sku=eq.'+encodeURIComponent(sku), {available: newAvail, updated_at: new Date().toISOString()});
-    const p = PRODUCTS.find(x=>x.sku===sku);
-    if(p) p.available = newAvail;
-    toast('Stock updated');
-  }catch(e){
-    console.error(e);
-    toast('Could not update stock', true);
-  }
+// -- Historical tracker import --
+function excelSerialToIso(n){
+  const ms = Math.round((n - 25569) * 86400 * 1000);
+  const d = new Date(ms);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function parseFlexibleDate(v){
+  if(v===null || v===undefined || v==='') return null;
+  if(typeof v === 'number') return excelSerialToIso(v);
+  const s = String(v).trim();
+  let m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})\.?$/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m = s.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})$/);
+  if(m) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  const d = new Date(s);
+  if(!isNaN(d.getTime())) return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  return null;
+}
+function parseReceived(v){
+  if(v===null||v===undefined) return null;
+  const s = String(v).trim().toLowerCase();
+  if(s==='yes'||s==='y') return true;
+  if(s==='no'||s==='n') return false;
+  return null;
 }
 
-// -- History --
-let historyRows = [];
-async function loadHistory(){
-  const status = document.getElementById('filterStatus').value;
-  let path = 'requests?select=*&order=created_at.desc&limit=500';
-  if(status) path += '&status=eq.'+status;
-  historyRows = await sb('GET', path);
-  const tbody = document.querySelector('#historyTable tbody');
-  tbody.innerHTML = historyRows.map(r=>
-    '<tr><td>'+fmtDate(r.created_at)+'</td><td>'+escapeHtml(r.requester_name)+'</td><td>'+escapeHtml(r.department||'')+'</td>'+
-    '<td>'+(PURPOSE_LABELS[r.purpose]||r.purpose)+'</td><td>'+escapeHtml(r.product)+'</td>'+
-    '<td>'+r.qty_requested+'</td><td>'+(r.qty_approved!=null?r.qty_approved:'-')+'</td>'+
-    '<td>'+statusBadge(r.status)+'</td>'+
-    '<td><button class="secondary small" onclick="deleteRequestRow('+r.id+')">Delete</button></td></tr>'
-  ).join('');
-}
+async function importHistoryFile(){
+  const input = document.getElementById('historyFile');
+  const status = document.getElementById('historyImportStatus');
+  if(!input.files.length){ toast('Choose a file first', true); return; }
+  status.textContent = 'Reading file...';
+  const file = input.files[0];
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array'});
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:true});
 
-async function deleteRequestRow(id){
-  const row = historyRows.find(r=>r.id===id);
-  if(!row) return;
-  const willRestock = row.status === 'fulfilled' && row.qty_approved;
-  const msg = 'Delete this request for '+row.requester_name+' ('+row.product+')?'+
-    (willRestock ? ' '+row.qty_approved+' units will be restocked back to available.' : '');
-  if(!confirm(msg)) return;
-  try{
-    if(willRestock){
-      const p = PRODUCTS.find(x=>x.sku===row.sku);
-      if(p){
-        const newAvailable = Number(p.available) + Number(row.qty_approved);
-        await sb('PATCH','products?sku=eq.'+encodeURIComponent(row.sku), {available: newAvailable});
-        p.available = newAvailable;
-      }
-    }
-    await sb('DELETE','requests?id=eq.'+id, null, {'Prefer':'return=minimal'});
-    toast('Deleted'+(willRestock?' and stock restocked':''));
-    loadHistory();
-  }catch(e){
-    console.error(e);
-    toast('Could not delete this request', true);
-  }
-}
-
-function exportHistoryCsv(){
-  const header = ['Date','Requester','Department','Purpose','SKU','Product','Qty Requested','Qty Approved','Status'];
-  const lines = [header.join(',')];
-  historyRows.forEach(r=>{
-    lines.push([fmtDate(r.created_at), r.requester_name, r.department||'', PURPOSE_LABELS[r.purpose]||r.purpose,
-      r.sku||'', '"'+String(r.product).replace(/"/g,'""')+'"', r.qty_requested, r.qty_approved!=null?r.qty_approved:'', r.status].join(','));
+  const headerIdx = rows.findIndex(r => r.some(c => String(c).trim().toLowerCase()==='employee'));
+  if(headerIdx === -1){ status.textContent = 'Could not find an "Employee" column — is this the right file?'; return; }
+  const header = rows[headerIdx].map(h => String(h||'').trim().toLowerCase());
+  const col = {};
+  header.forEach((h,idx)=>{
+    if(h==='date') col.date = idx;
+    else if(h.includes('recon')) col.recon = idx;
+    else if(h.includes('reason')) col.reason = idx;
+    else if(h.includes('employee')) col.employee = idx;
+    else if(h.includes('sku')) col.sku = idx;
+    else if(h.includes('description')) col.product = idx;
+    else if(h.includes('units')||h.includes('qty')) col.qty = idx;
+    else if(h.includes('return transfer')) col.returnTransfer = idx;
+    else if(h.includes('transfer')) col.transfer = idx;
+    else if(h.includes('received')) col.received = idx;
+    else if(h.includes('feedback')) col.feedback = idx;
   });
-  const blob = new Blob([lines.join('\n')], {type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = 'stock-requests-history.csv'; a.click();
+  if(col.employee===undefined || col.product===undefined){ status.textContent = 'Missing required columns (Employee / Description).'; return; }
+
+  let lastDate=null, lastReason=null, lastEmployee=null;
+  const groups = [];
+  let current = null;
+  for(let i=headerIdx+1;i<rows.length;i++){
+    const r = rows[i];
+    const rawDate = col.date!==undefined ? r[col.date] : null;
+    const rawReason = col.reason!==undefined ? r[col.reason] : null;
+    const rawEmployee = r[col.employee];
+    const product = col.product!==undefined ? r[col.product] : null;
+    if(!product) continue; // skip blank rows
+
+    const isNewGroup = !!(rawDate || rawReason || rawEmployee);
+    if(isNewGroup){
+      lastDate = parseFlexibleDate(rawDate) || lastDate;
+      lastReason = (rawReason!=null && String(rawReason).trim()!=='') ? String(rawReason).trim() : lastReason;
+      lastEmployee = (rawEmployee!=null && String(rawEmployee).trim()!=='') ? String(rawEmployee).trim() : lastEmployee;
+      current = {batch_id: uuid(), request_date: lastDate || todayIso(), requester_name: lastEmployee || 'Unknown', reason: lastReason || 'Stock Request', items: []};
+      groups.push(current);
+    }
+    if(!current){
+      current = {batch_id: uuid(), request_date: todayIso(), requester_name: lastEmployee || 'Unknown', reason: lastReason || 'Stock Request', items: []};
+      groups.push(current);
+    }
+    current.items.push({
+      sku: col.sku!==undefined && r[col.sku] ? String(r[col.sku]).trim() : null,
+      product: String(product).trim(),
+      qty: col.qty!==undefined && r[col.qty] ? parseInt(r[col.qty])||1 : 1,
+      transfer_number: col.transfer!==undefined && r[col.transfer] ? String(r[col.transfer]).trim() : null,
+      recon_date: col.recon!==undefined ? parseFlexibleDate(r[col.recon]) : null,
+      received: col.received!==undefined ? parseReceived(r[col.received]) : null,
+      feedback: col.feedback!==undefined && r[col.feedback] ? String(r[col.feedback]).trim() : null,
+      return_transfer_number: col.returnTransfer!==undefined && r[col.returnTransfer] ? String(r[col.returnTransfer]).trim() : null
+    });
+  }
+
+  const insertRows = [];
+  groups.forEach(g=>{
+    g.items.forEach(it=>{
+      insertRows.push({
+        batch_id: g.batch_id, request_date: g.request_date, requester_name: g.requester_name, reason: g.reason,
+        sku: it.sku, product: it.product, qty: it.qty, transfer_number: it.transfer_number,
+        recon_date: it.recon_date, received: it.received, feedback: it.feedback, return_transfer_number: it.return_transfer_number
+      });
+    });
+  });
+
+  status.textContent = 'Importing '+insertRows.length+' line items across '+groups.length+' requests...';
+  const batchSize = 300;
+  for(let i=0;i<insertRows.length;i+=batchSize){
+    const batch = insertRows.slice(i,i+batchSize);
+    await sb('POST','requests', batch, {'Prefer':'return=minimal'});
+    status.textContent = 'Imported '+Math.min(i+batchSize,insertRows.length)+' / '+insertRows.length+' line items...';
+  }
+
+  const uniqueNames = Array.from(new Set(insertRows.map(r=>r.requester_name).filter(n=>n && n!=='Unknown')));
+  const existingNames = new Set(REQUESTERS.map(r=>r.name));
+  const newRequesters = uniqueNames.filter(n=>!existingNames.has(n)).map(n=>({name:n}));
+  if(newRequesters.length){
+    await sb('POST','requesters', newRequesters, {'Prefer':'resolution=merge-duplicates,return=minimal'});
+    await loadRequesters();
+  }
+
+  status.textContent = 'Import complete: '+insertRows.length+' line items across '+groups.length+' requests.';
+  loadLog();
 }
 
 // ---------------- INIT ----------------
 if(CONFIG.EMAILJS_PUBLIC_KEY && window.emailjs) emailjs.init({publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
+document.getElementById('reqDate').value = todayIso();
 (async function init(){
   try{ await loadRequesters(); }catch(e){ console.error(e); toast('Could not load requesters list', true); }
   try{ await loadProducts(); }catch(e){ console.error(e); toast('Could not load product catalog', true); }

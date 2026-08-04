@@ -1,10 +1,15 @@
 -- Stock Requests — Supabase schema
 -- Run this once in the Supabase SQL Editor on a new project (separate from WHIP / staff-allowance).
+--
+-- Models the marketing team's actual process (not a budget/approval flow): a requester submits a
+-- request for one or more products; logistics later pulls the stock and records a Transfer Number
+-- once it's physically moved; some requests are loans that get reconciled later (recon date,
+-- whether it was received back, an outcome note, and a return transfer number). Many requests are
+-- simply consumed and never reconciled — that's normal, not an error state.
 
 create table requesters (
   id bigint generated always as identity primary key,
   name text not null unique,
-  email text,
   department text
 );
 
@@ -13,35 +18,35 @@ create table products (
   product text not null,
   category text,
   subcat text,
-  available numeric default 0,
   updated_at timestamptz default now()
 );
 
--- One row per line item. Items submitted together in the same cart share a batch_id so the UI
--- can group them back into a single "request" card, but each line has its own approve/fulfil status
--- since an approver may want to knock back one item without blocking the rest.
+-- One row per product line. Items submitted together in the same request share a batch_id so the
+-- UI can group them back into a single request card.
 create table requests (
   id bigint generated always as identity primary key,
   batch_id uuid not null,
   created_at timestamptz default now(),
-  requester_name text not null references requesters(name),
+  request_date date not null default current_date,
+  requester_name text not null,
   department text,
-  purpose text not null, -- 'photoshoot' | 'gifting_pr' | 'event' | 'social_media' | 'in_store_display' | 'other'
-  note text,
+  reason text not null,
+  expected_return_date date, -- "Date stock will be returned" on the request form; null if not a loan
   sku text, -- intentionally no FK to products: history must survive a product being discontinued
   product text not null,
-  qty_requested int not null default 1,
-  qty_approved int,
-  status text not null default 'pending' check (status in ('pending','approved','rejected','fulfilled')),
-  approved_by text,
-  approved_at timestamptz,
-  rejected_reason text,
-  fulfilled_at timestamptz
+  qty int not null default 1,
+  transfer_number text,   -- filled in by logistics once the stock is physically moved out
+  date_completed date,    -- when logistics completed that outbound transfer
+  recon_date date,
+  received boolean,       -- null = not yet reconciled, not "no"
+  feedback text,          -- free text outcome, e.g. "Returned to Stock" / "Transferred to rejects" / "Reject"
+  return_transfer_number text,
+  notes text
 );
 
 create index requests_batch_idx on requests(batch_id);
 create index requests_requester_idx on requests(requester_name);
-create index requests_status_idx on requests(status);
+create index requests_transfer_idx on requests(transfer_number);
 create index products_product_idx on products using gin (to_tsvector('english', product));
 
 alter table requesters enable row level security;
