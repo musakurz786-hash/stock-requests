@@ -415,7 +415,7 @@ async function submitRequest(){
 
   try{
     if(!REQUESTERS.find(r=>r.name===name)){
-      await sb('POST','requesters', {name, department: department||null}, {'Prefer':'resolution=merge-duplicates,return=minimal'});
+      await sb('POST','requesters?on_conflict=name', {name, department: department||null}, {'Prefer':'resolution=merge-duplicates,return=minimal'});
     }
     const rows = cart.map(c => ({
       batch_id, request_date: date, requester_name: name, department: department||null,
@@ -858,7 +858,7 @@ async function importHistoryFile(){
   const existingNames = new Set(REQUESTERS.map(r=>r.name));
   const newRequesters = uniqueNames.filter(n=>!existingNames.has(n)).map(n=>({name:n}));
   if(newRequesters.length){
-    await sb('POST','requesters', newRequesters, {'Prefer':'resolution=merge-duplicates,return=minimal'});
+    await sb('POST','requesters?on_conflict=name', newRequesters, {'Prefer':'resolution=merge-duplicates,return=minimal'});
     await loadRequesters();
   }
 
