@@ -130,12 +130,6 @@
 
     <div id="results" class="results" style="display:none"></div>
 
-    <div class="row-flex" style="margin-bottom:20px">
-      <div class="field"><label>Or add a custom item — SKU (optional)</label><input type="text" id="customSku"></div>
-      <div class="field" style="flex:2"><label>Product / Description</label><input type="text" id="customProduct"></div>
-      <button class="secondary" onclick="addCustomItem()">Add</button>
-    </div>
-
     <div id="cartWrap" style="display:none">
       <h2>Request Cart</h2>
       <div id="cart" class="cart"></div>
@@ -370,16 +364,6 @@ function addToCart(sku){
   document.getElementById('productSearch').value = '';
   document.getElementById('results').style.display = 'none';
   document.getElementById('results').innerHTML = '';
-  renderCart();
-}
-
-function addCustomItem(){
-  const sku = document.getElementById('customSku').value.trim();
-  const product = document.getElementById('customProduct').value.trim();
-  if(!product){ toast('Enter a product name first', true); return; }
-  cart.push({sku: sku||null, product, qty:1});
-  document.getElementById('customSku').value = '';
-  document.getElementById('customProduct').value = '';
   renderCart();
 }
 
