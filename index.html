@@ -295,6 +295,9 @@ function showView(name){
 
 function computeStatus(r){
   if(!r.transfer_number) return 'awaiting';
+  // "Still holding onto it" is a requester self-report that it's explicitly NOT settled yet —
+  // must not count as reconciled just because the feedback field is non-empty.
+  if(r.feedback === 'Still holding onto it') return 'transferred';
   if(r.feedback || r.return_transfer_number) return 'reconciled';
   return 'transferred';
 }
