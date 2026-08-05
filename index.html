@@ -466,29 +466,55 @@ async function submitRequest(){
 }
 
 // ---------------- MY REQUESTS VIEW ----------------
+const MINE_STATUS_OPTIONS = ['Still holding onto it', 'Returned to Stock', 'Not returning it'];
+let mineRows = [];
+
 async function loadMyRequests(){
   const name = document.getElementById('mineName').value.trim();
   const list = document.getElementById('mineList');
   if(!name){ list.innerHTML=''; return; }
   list.innerHTML = '<div class="empty">Loading...</div>';
-  const rows = await sb('GET','requests?select=*&requester_name=eq.'+encodeURIComponent(name)+'&order=request_date.desc&limit=300');
-  if(!rows.length){ list.innerHTML = '<div class="empty">No requests yet.</div>'; return; }
-  const batches = groupByBatch(rows);
+  mineRows = await sb('GET','requests?select=*&requester_name=eq.'+encodeURIComponent(name)+'&order=request_date.desc&limit=300');
+  renderMineList();
+}
+
+function renderMineList(){
+  const list = document.getElementById('mineList');
+  if(!mineRows.length){ list.innerHTML = '<div class="empty">No requests yet.</div>'; return; }
+  const batches = groupByBatch(mineRows);
   list.innerHTML = batches.map(items=>{
     const head = items[0];
-    const itemsHtml = items.map(i=>
-      '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
+    const itemsHtml = items.map(i=>{
+      const statusOptionsHtml = MINE_STATUS_OPTIONS.map(o=>
+        '<option value="'+escapeHtml(o)+'"'+(i.feedback===o?' selected':'')+'>'+escapeHtml(o)+'</option>').join('');
+      return '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
       statusBadge(computeStatus(i))+'</div>'+
       (i.transfer_number ? '<div class="imeta">Transfer '+escapeHtml(i.transfer_number)+(i.date_completed?' &middot; '+fmtDate(i.date_completed):'')+'</div>' : '')+
-      (i.feedback ? '<div class="imeta">'+escapeHtml(i.feedback)+'</div>' : '')+
-      '</div>'
-    ).join('');
+      (i.transfer_number ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
+        '<select onchange="updateMyFeedback('+i.id+', this.value)">'+
+          '<option value=""'+(i.feedback?'':' selected')+'>— update status —</option>'+statusOptionsHtml+
+        '</select></div>' : '')+
+      '</div>';
+    }).join('');
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
       (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
       '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       itemsHtml+'</div>';
   }).join('');
+}
+
+async function updateMyFeedback(id, value){
+  try{
+    await sb('PATCH','requests?id=eq.'+id, {feedback: value || null});
+    const row = mineRows.find(r=>r.id===id);
+    if(row) row.feedback = value || null;
+    renderMineList();
+    toast('Status updated');
+  }catch(e){
+    console.error(e);
+    toast('Could not save that update', true);
+  }
 }
 
 // ---------------- MANAGE VIEW ----------------
