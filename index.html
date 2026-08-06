@@ -582,7 +582,12 @@ function renderLog(){
         '<div class="lf"><label>Feedback</label><input type="text" list="feedbackOptions" value="'+escapeHtml(i.feedback||'')+'" onblur="saveField('+i.id+',\'feedback\',this.value)"></div>'+
         '<div class="lf"><label>Return Transfer #</label><input type="text" value="'+escapeHtml(i.return_transfer_number||'')+'" onblur="saveField('+i.id+',\'return_transfer_number\',this.value)"></div>'+
       '</div>'+
-      '<div style="margin-top:6px"><button class="secondary small" onclick="deleteRequestRow('+i.id+')">Delete</button></div>'+
+      '<div style="margin-top:6px;display:flex;gap:8px;align-items:center">'+
+        (i.date_completed
+          ? '<span class="imeta" style="color:var(--good)">&#10003; Delivered '+fmtDate(i.date_completed)+'</span>'
+          : '<button class="secondary small" onclick="markDelivered('+i.id+')">Mark Delivered</button>')+
+        '<button class="secondary small" onclick="deleteRequestRow('+i.id+')">Delete</button>'+
+      '</div>'+
       '</div>'
     ).join('');
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
@@ -605,6 +610,29 @@ async function saveField(id, field, value){
   }catch(e){
     console.error(e);
     toast('Could not save that change', true);
+  }
+}
+
+// Same effect as confirming via the emailed "Mark as Delivered" link, but reachable directly
+// from the log — sets Date Completed and fires the "Stock Delivered" notification. Manually
+// editing the Date Completed field above does NOT send this notification; only this does.
+async function markDelivered(id){
+  try{
+    await sb('PATCH','requests?id=eq.'+id, {date_completed: todayIso()});
+    const row = logRows.find(r=>r.id===id);
+    if(row) row.date_completed = todayIso();
+    renderLog();
+    toast('Marked delivered');
+    if(row && CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
+      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
+        email: CONFIG.LOGISTICS_EMAIL, email_type: 'Stock Delivered', requester_name: row.requester_name,
+        department: row.department||'-', reason: row.reason, request_date: fmtDate(todayIso()),
+        item_lines: row.product+' (x'+row.qty+')', batch_id: row.batch_id
+      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
+    }
+  }catch(e){
+    console.error(e);
+    toast('Could not mark this delivered', true);
   }
 }
 
