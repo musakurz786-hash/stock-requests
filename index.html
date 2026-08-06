@@ -958,8 +958,13 @@ async function confirmDelivery(batchId){
   try{
     const rows = await sb('GET','requests?select=*&batch_id=eq.'+encodeURIComponent(batchId));
     await sb('PATCH','requests?batch_id=eq.'+encodeURIComponent(batchId), {date_completed: todayIso()});
-    document.getElementById('deliverCard').innerHTML =
-      '<div class="empty" style="color:var(--good);font-size:15px">&#10003; Marked as delivered. Thank you!</div>';
+    if(btn){
+      btn.disabled = true;
+      btn.textContent = '✓ Delivered';
+      btn.style.opacity = '1';
+      btn.style.background = 'var(--good)';
+      btn.style.cursor = 'default';
+    }
     if(rows.length && CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
       const head = rows[0];
       const itemLines = rows.map(r=>r.product+' (x'+r.qty+')').join('\n');
