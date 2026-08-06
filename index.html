@@ -278,16 +278,6 @@ function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;',
 function todayIso(){ const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function fmtDate(d){ if(!d) return '-'; return new Date(d+'T00:00:00').toLocaleDateString('en-ZA', {year:'numeric',month:'short',day:'numeric'}); }
 
-// Rendered into the email template's {{action_button}} slot — only present on the "request
-// submitted" email. Pass '' for any other email_type so the button doesn't show on the
-// "Stock Delivered" confirmation itself (there'd be nothing left to confirm).
-function deliverButtonHtml(batchId){
-  return '<div style="text-align:center; margin-top: 28px;">'+
-    '<a href="https://musakurz786-hash.github.io/stock-requests/?deliver='+encodeURIComponent(batchId)+'" '+
-    'style="display:inline-block; background-color:#8BC34A; color:#1c1c1c; text-decoration:none; padding:12px 26px; border-radius:3px; font-size:13px; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">'+
-    'Mark as Delivered</a></div>';
-}
-
 function uuid(){
   if(crypto.randomUUID) return crypto.randomUUID();
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
@@ -449,7 +439,7 @@ async function submitRequest(){
       emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
         email: toEmails.join(','), email_type: 'Stock Request Submitted', requester_name: name,
         department: department||'-', reason, request_date: fmtDate(date), item_lines: itemLines,
-        batch_id, action_button: deliverButtonHtml(batch_id)
+        batch_id
       }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
     }
 
@@ -637,7 +627,7 @@ async function markDelivered(id){
       emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
         email: CONFIG.LOGISTICS_EMAIL, email_type: 'Stock Delivered', requester_name: row.requester_name,
         department: row.department||'-', reason: row.reason, request_date: fmtDate(todayIso()),
-        item_lines: row.product+' (x'+row.qty+')', batch_id: row.batch_id, action_button: ''
+        item_lines: row.product+' (x'+row.qty+')', batch_id: row.batch_id
       }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
     }
   }catch(e){
@@ -976,7 +966,7 @@ async function confirmDelivery(batchId){
       emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
         email: CONFIG.LOGISTICS_EMAIL, email_type: 'Stock Delivered', requester_name: head.requester_name,
         department: head.department||'-', reason: head.reason, request_date: fmtDate(todayIso()),
-        item_lines: itemLines, batch_id: batchId, action_button: ''
+        item_lines: itemLines, batch_id: batchId
       }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
     }
   }catch(e){
