@@ -224,6 +224,14 @@
     </div>
   </div>
 
+  <!-- DELIVERY CONFIRMATION VIEW — reached only via the "Mark as Delivered" email link
+       (?deliver=<batch_id>). Deliberately requires a click here rather than firing on page
+       load, since corporate email scanners auto-open links to check for phishing and would
+       otherwise trigger this before a human ever saw the email. -->
+  <div id="view-deliver" class="view">
+    <div class="card" id="deliverCard"><div class="empty">Loading request details...</div></div>
+  </div>
+
 </main>
 
 <div id="toast" class="toast"></div>
@@ -429,8 +437,9 @@ async function submitRequest(){
       const toEmails = [CONFIG.LOGISTICS_EMAIL];
       if(notifyWarehouse && CONFIG.WAREHOUSE_EMAIL) toEmails.push(CONFIG.WAREHOUSE_EMAIL);
       emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
-        email: toEmails.join(','), requester_name: name, department: department||'-',
-        reason, request_date: fmtDate(date), item_lines: itemLines
+        email: toEmails.join(','), email_type: 'Stock Request Submitted', requester_name: name,
+        department: department||'-', reason, request_date: fmtDate(date), item_lines: itemLines,
+        batch_id
       }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
     }
 
@@ -887,14 +896,71 @@ async function importHistoryFile(){
   loadLog();
 }
 
+// -- Delivery confirmation (reached via ?deliver=<batch_id> link in the submission email) --
+async function initDeliverView(batchId){
+  document.querySelector('header nav').style.display = 'none';
+  ['request','mine','manage','deliver'].forEach(v=>{
+    document.getElementById('view-'+v).classList.toggle('active', v==='deliver');
+  });
+  const card = document.getElementById('deliverCard');
+  try{
+    const rows = await sb('GET','requests?select=*&batch_id=eq.'+encodeURIComponent(batchId));
+    if(!rows.length){ card.innerHTML = '<div class="empty">This request link is no longer valid.</div>'; return; }
+    const head = rows[0];
+    const itemLines = rows.map(r=>'<div>'+escapeHtml(r.product)+' <span class="imeta">x'+r.qty+'</span></div>').join('');
+    const alreadyDone = rows.every(r=>r.date_completed);
+    card.innerHTML =
+      '<div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
+      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
+      '<div class="note">'+escapeHtml(head.reason)+'</div>'+
+      '<div style="margin:14px 0">'+itemLines+'</div>'+
+      (alreadyDone
+        ? '<div class="imeta" style="color:var(--good);font-weight:bold">Already marked as delivered.</div>'
+        : '<button class="primary" id="confirmDeliverBtn" onclick="confirmDelivery(\''+batchId+'\')">Confirm Delivery</button>');
+  }catch(e){
+    console.error(e);
+    card.innerHTML = '<div class="empty">Could not load this request.</div>';
+  }
+}
+
+async function confirmDelivery(batchId){
+  const btn = document.getElementById('confirmDeliverBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Confirming...'; }
+  try{
+    const rows = await sb('GET','requests?select=*&batch_id=eq.'+encodeURIComponent(batchId));
+    await sb('PATCH','requests?batch_id=eq.'+encodeURIComponent(batchId), {date_completed: todayIso()});
+    document.getElementById('deliverCard').innerHTML =
+      '<div class="empty" style="color:var(--good);font-size:15px">&#10003; Marked as delivered. Thank you!</div>';
+    if(rows.length && CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
+      const head = rows[0];
+      const itemLines = rows.map(r=>r.product+' (x'+r.qty+')').join('\n');
+      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
+        email: CONFIG.LOGISTICS_EMAIL, email_type: 'Stock Delivered', requester_name: head.requester_name,
+        department: head.department||'-', reason: head.reason, request_date: fmtDate(todayIso()),
+        item_lines: itemLines, batch_id: batchId
+      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
+    }
+  }catch(e){
+    console.error(e);
+    toast('Could not confirm delivery', true);
+    if(btn){ btn.disabled=false; btn.textContent='Confirm Delivery'; }
+  }
+}
+
 // ---------------- INIT ----------------
 if(CONFIG.EMAILJS_PUBLIC_KEY && window.emailjs) emailjs.init({publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
 document.getElementById('reqDate').value = todayIso();
-(async function init(){
-  try{ await loadRequesters(); }catch(e){ console.error(e); toast('Could not load requesters list', true); }
-  try{ await loadProducts(); }catch(e){ console.error(e); toast('Could not load product catalog', true); }
-})();
-if(sessionStorage.getItem('srManage')==='1') showManageBody();
+const deliverBatchId = new URLSearchParams(location.search).get('deliver');
+if(deliverBatchId){
+  initDeliverView(deliverBatchId);
+}else{
+  (async function init(){
+    try{ await loadRequesters(); }catch(e){ console.error(e); toast('Could not load requesters list', true); }
+    try{ await loadProducts(); }catch(e){ console.error(e); toast('Could not load product catalog', true); }
+  })();
+  if(sessionStorage.getItem('srManage')==='1') showManageBody();
+}
 </script>
 </body>
 </html>
