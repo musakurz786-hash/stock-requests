@@ -700,7 +700,9 @@ async function importStockFile(){
   const header = rows[headerIdx].map(h => String(h).trim().toLowerCase());
   const skuCol = header.indexOf('sku');
   const productCol = header.indexOf('product');
-  const catCol = header.indexOf('category');
+  // Matches "Category", "Product Category", "Categories", etc. — exact-match on 'category' was
+  // missing real-world export column names that don't literally read just "category".
+  const catCol = header.findIndex(h => h.includes('categ'));
 
   const existingBySku = {};
   PRODUCTS.forEach(p => existingBySku[p.sku] = p);
