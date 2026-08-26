@@ -173,15 +173,17 @@
           <button data-f="awaiting" onclick="setLogFilter('awaiting')">Awaiting Transfer</button>
           <button data-f="transferred" onclick="setLogFilter('transferred')">Transferred</button>
           <button data-f="reconciled" onclick="setLogFilter('reconciled')">Reconciled</button>
+          <button data-f="deleted" onclick="setLogFilter('deleted')">Deleted</button>
         </div>
         <div id="logList"></div>
 
         <div class="admin-section" style="margin-top:32px">
           <h2>Import Historical Tracker</h2>
-          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the existing "Marketing Stock Request Sheet" export (.xlsx) to backfill history. Matches columns by header name (Date, Reason, Employee, SKU, Description, Units Requested, Transfer #, Recon Date, Received?, Feedback, Return Transfer) and groups consecutive rows into one request wherever Date/Reason/Employee repeat blank.</p>
+          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the existing "Marketing Stock Request Sheet" export (.xlsx) to backfill history. Matches columns by header name (Date, Reason, Employee, SKU, Description, Units Requested, Transfer #, Recon Date, Received?, Feedback, Return Transfer) and groups consecutive rows into one request wherever Date/Reason/Employee repeat blank or repeat the same value.</p>
           <input type="file" id="historyFile" accept=".xlsx,.xls">
-          <button class="secondary" style="margin-top:10px" onclick="importHistoryFile()">Import</button>
+          <button class="secondary" style="margin-top:10px" onclick="previewHistoryFile()">Preview Import</button>
           <div id="historyImportStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
+          <div id="historyImportPreview" style="margin-top:10px"></div>
         </div>
       </div>
 
@@ -205,8 +207,9 @@
           <h2>Import Stock Report</h2>
           <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the "Inventory Products Stock Level Report" export (.xlsx/.csv) to populate the searchable product catalog used by the request form. Matches by SKU; new SKUs are added.</p>
           <input type="file" id="stockFile" accept=".xlsx,.xls,.csv">
-          <button class="secondary" style="margin-top:10px" onclick="importStockFile()">Import</button>
+          <button class="secondary" style="margin-top:10px" onclick="previewStockFile()">Preview Import</button>
           <div id="importStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
+          <div id="stockImportPreview" style="margin-top:10px"></div>
         </div>
         <div class="admin-section">
           <h2>Add / Edit Product</h2>
@@ -470,7 +473,7 @@ async function loadMyRequests(){
   const list = document.getElementById('mineList');
   if(!name){ list.innerHTML=''; return; }
   list.innerHTML = '<div class="empty">Loading...</div>';
-  mineRows = await sb('GET','requests?select=*&requester_name=eq.'+encodeURIComponent(name)+'&order=request_date.desc&limit=300');
+  mineRows = await sb('GET','requests?select=*&deleted_at=is.null&requester_name=eq.'+encodeURIComponent(name)+'&order=request_date.desc&limit=300');
   renderMineList();
 }
 
@@ -540,21 +543,64 @@ function showSub(name){
 
 // -- Transfer & Recon Log --
 let logRows = [];
+let deletedLogRows = [];
+let deletedLogLoaded = false;
 let logFilter = '';
 
-function setLogFilter(f){
+async function setLogFilter(f){
   logFilter = f;
   document.querySelectorAll('.filternav button').forEach(b=>b.classList.toggle('active', b.dataset.f===f));
+  if(f === 'deleted' && !deletedLogLoaded){
+    document.getElementById('logList').innerHTML = '<div class="empty">Loading...</div>';
+    deletedLogRows = await sb('GET','requests?select=*&deleted_at=not.is.null&order=deleted_at.desc&limit=500');
+    deletedLogLoaded = true;
+  }
   renderLog();
 }
 
+const LOG_FETCH_LIMIT = 5000;
 async function loadLog(){
   document.getElementById('logList').innerHTML = '<div class="empty">Loading...</div>';
-  logRows = await sb('GET','requests?select=*&order=request_date.desc&limit=2000');
+  logRows = await sb('GET','requests?select=*&deleted_at=is.null&order=request_date.desc&limit='+LOG_FETCH_LIMIT);
+  deletedLogLoaded = false; // re-fetch deleted list next time that tab is opened, in case it changed
   renderLog();
+}
+
+function renderDeletedLog(){
+  const el = document.getElementById('logList');
+  if(!deletedLogRows.length){ el.innerHTML = '<div class="empty">Nothing deleted.</div>'; return; }
+  const batches = groupByBatch(deletedLogRows);
+  el.innerHTML = batches.map(items=>{
+    const head = items[0];
+    const itemsHtml = items.map(i=>
+      '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
+      '<button class="secondary small" onclick="restoreRequestRow('+i.id+')">Restore</button></div>'+
+      '<div class="imeta">Deleted '+fmtDate(i.deleted_at ? i.deleted_at.slice(0,10) : null)+'</div>'+
+      '</div>'
+    ).join('');
+    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
+      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
+      '<div class="note">'+escapeHtml(head.reason)+'</div>'+
+      itemsHtml+'</div>';
+  }).join('');
+}
+
+async function restoreRequestRow(id){
+  try{
+    await sb('PATCH','requests?id=eq.'+id, {deleted_at: null});
+    deletedLogRows = deletedLogRows.filter(r=>r.id!==id);
+    renderDeletedLog();
+    toast('Restored');
+    loadLog(); // refresh the main list so it reappears there too next time that tab is opened
+  }catch(e){
+    console.error(e);
+    toast('Could not restore this request', true);
+  }
 }
 
 function renderLog(){
+  if(logFilter === 'deleted'){ renderDeletedLog(); return; }
   const q = document.getElementById('logSearch').value.trim().toLowerCase();
   let rows = logRows;
   if(logFilter) rows = rows.filter(r=>computeStatus(r)===logFilter);
@@ -563,9 +609,12 @@ function renderLog(){
     (r.transfer_number||'').toLowerCase().includes(q) || (r.reason||'').toLowerCase().includes(q) ||
     (r.return_transfer_number||'').toLowerCase().includes(q));
   const el = document.getElementById('logList');
-  if(!rows.length){ el.innerHTML = '<div class="empty">No matching requests.</div>'; return; }
+  const truncatedWarning = logRows.length >= LOG_FETCH_LIMIT
+    ? '<div class="empty" style="color:var(--warn);text-align:left;padding:10px 0">&#9888; Showing the '+LOG_FETCH_LIMIT+' most recent requests — older ones exist but aren\'t loaded. Narrow the search/filter to find them.</div>'
+    : '';
+  if(!rows.length){ el.innerHTML = truncatedWarning + '<div class="empty">No matching requests.</div>'; return; }
   const batches = groupByBatch(rows);
-  el.innerHTML = batches.map(items=>{
+  el.innerHTML = truncatedWarning + batches.map(items=>{
     const head = items[0];
     const itemsHtml = items.map(i=>
       '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+(i.sku?' &middot; SKU '+escapeHtml(i.sku):'')+'</span></span>'+
@@ -636,10 +685,12 @@ async function markDelivered(id){
   }
 }
 
+// Soft delete — sets deleted_at rather than removing the row, so a mistaken delete is
+// recoverable (restoreRequestRow undoes it). Every GET on requests filters deleted_at=is.null.
 async function deleteRequestRow(id){
-  if(!confirm('Delete this request line permanently?')) return;
+  if(!confirm('Delete this request line? If this was a mistake, it can be restored from the "Deleted" tab above.')) return;
   try{
-    await sb('DELETE','requests?id=eq.'+id, null, {'Prefer':'return=minimal'});
+    await sb('PATCH','requests?id=eq.'+id, {deleted_at: new Date().toISOString()});
     logRows = logRows.filter(r=>r.id!==id);
     renderLog();
     toast('Deleted');
@@ -721,9 +772,14 @@ async function deleteRequester(name){
 }
 
 // -- Stock catalog --
-async function importStockFile(){
+let pendingStockUpdates = null;
+
+async function previewStockFile(){
   const input = document.getElementById('stockFile');
   const status = document.getElementById('importStatus');
+  const preview = document.getElementById('stockImportPreview');
+  preview.innerHTML = '';
+  pendingStockUpdates = null;
   if(!input.files.length){ toast('Choose a file first', true); return; }
   status.textContent = 'Reading file...';
   const file = input.files[0];
@@ -745,11 +801,13 @@ async function importStockFile(){
   PRODUCTS.forEach(p => existingBySku[p.sku] = p);
 
   const updates = [];
+  let newCount = 0, existingCount = 0;
   for(let i=headerIdx+1;i<rows.length;i++){
     const r = rows[i];
     const sku = r[skuCol] ? String(r[skuCol]).trim() : '';
     if(!sku) continue;
     const existing = existingBySku[sku];
+    if(existing) existingCount++; else newCount++;
     updates.push({
       sku, product: (r[productCol]||(existing?existing.product:'')),
       category: catCol>=0 ? (r[catCol]||(existing?existing.category:null)) : (existing?existing.category:null),
@@ -757,6 +815,21 @@ async function importStockFile(){
     });
   }
 
+  if(!updates.length){ status.textContent = 'No rows with a SKU found in this file.'; return; }
+  pendingStockUpdates = updates;
+  status.textContent = '';
+  preview.innerHTML =
+    '<div class="empty" style="text-align:left">This will update <b>'+updates.length+'</b> products — '+
+    '<b>'+newCount+'</b> new, <b>'+existingCount+'</b> existing'+(catCol<0?' (no Category column found in this file — category left unchanged)':'')+'.</div>'+
+    '<button class="primary" style="margin-top:10px" onclick="confirmStockImport()">Confirm Import</button>';
+}
+
+async function confirmStockImport(){
+  if(!pendingStockUpdates) return;
+  const status = document.getElementById('importStatus');
+  const preview = document.getElementById('stockImportPreview');
+  const updates = pendingStockUpdates;
+  preview.innerHTML = '';
   status.textContent = 'Updating '+updates.length+' products...';
   const batchSize = 500;
   for(let i=0;i<updates.length;i+=batchSize){
@@ -767,6 +840,7 @@ async function importStockFile(){
   status.textContent = 'Done — '+updates.length+' products updated. Reloading catalog...';
   await loadProducts();
   status.textContent = 'Stock import complete: '+updates.length+' products updated.';
+  pendingStockUpdates = null;
 }
 
 async function upsertProduct(){
@@ -828,9 +902,14 @@ function parseReceived(v){
   return null;
 }
 
-async function importHistoryFile(){
+let pendingHistoryRows = null;
+
+async function previewHistoryFile(){
   const input = document.getElementById('historyFile');
   const status = document.getElementById('historyImportStatus');
+  const preview = document.getElementById('historyImportPreview');
+  preview.innerHTML = '';
+  pendingHistoryRows = null;
   if(!input.files.length){ toast('Choose a file first', true); return; }
   status.textContent = 'Reading file...';
   const file = input.files[0];
@@ -869,16 +948,26 @@ async function importHistoryFile(){
     const product = col.product!==undefined ? r[col.product] : null;
     if(!product) continue; // skip blank rows
 
-    const isNewGroup = !!(rawDate || rawReason || rawEmployee);
+    const parsedDate = rawDate ? parseFlexibleDate(rawDate) : null;
+    const trimmedReason = (rawReason!=null && String(rawReason).trim()!=='') ? String(rawReason).trim() : null;
+    const trimmedEmployee = (rawEmployee!=null && String(rawEmployee).trim()!=='') ? String(rawEmployee).trim() : null;
+
+    // A new request starts only when a provided value actually DIFFERS from what's already
+    // accumulated — not merely whenever a cell is non-blank. The source sheet sometimes repeats
+    // the same Date/Reason/Employee on every line of one request instead of leaving them blank
+    // after the first row; treating every non-blank cell as "new" was splitting those into a
+    // separate request per line instead of one combined request.
+    const isNewGroup = !current ||
+      (parsedDate && parsedDate !== lastDate) ||
+      (trimmedReason && trimmedReason !== lastReason) ||
+      (trimmedEmployee && trimmedEmployee !== lastEmployee);
+
+    if(parsedDate) lastDate = parsedDate;
+    if(trimmedReason) lastReason = trimmedReason;
+    if(trimmedEmployee) lastEmployee = trimmedEmployee;
+
     if(isNewGroup){
-      lastDate = parseFlexibleDate(rawDate) || lastDate;
-      lastReason = (rawReason!=null && String(rawReason).trim()!=='') ? String(rawReason).trim() : lastReason;
-      lastEmployee = (rawEmployee!=null && String(rawEmployee).trim()!=='') ? String(rawEmployee).trim() : lastEmployee;
       current = {batch_id: uuid(), request_date: lastDate || todayIso(), requester_name: lastEmployee || 'Unknown', reason: lastReason || 'Stock Request', items: []};
-      groups.push(current);
-    }
-    if(!current){
-      current = {batch_id: uuid(), request_date: todayIso(), requester_name: lastEmployee || 'Unknown', reason: lastReason || 'Stock Request', items: []};
       groups.push(current);
     }
     current.items.push({
@@ -904,7 +993,27 @@ async function importHistoryFile(){
     });
   });
 
-  status.textContent = 'Importing '+insertRows.length+' line items across '+groups.length+' requests...';
+  if(!insertRows.length){ status.textContent = 'No importable rows found in this file.'; return; }
+  const uniqueNames = Array.from(new Set(insertRows.map(r=>r.requester_name).filter(n=>n && n!=='Unknown')));
+  const existingNames = new Set(REQUESTERS.map(r=>r.name));
+  const newNamesCount = uniqueNames.filter(n=>!existingNames.has(n)).length;
+
+  pendingHistoryRows = insertRows;
+  status.textContent = '';
+  preview.innerHTML =
+    '<div class="empty" style="text-align:left">This will import <b>'+insertRows.length+'</b> line items across '+
+    '<b>'+groups.length+'</b> requests, adding <b>'+newNamesCount+'</b> new requester'+(newNamesCount===1?'':'s')+' to the list.</div>'+
+    '<button class="primary" style="margin-top:10px" onclick="confirmHistoryImport()">Confirm Import</button>';
+}
+
+async function confirmHistoryImport(){
+  if(!pendingHistoryRows) return;
+  const status = document.getElementById('historyImportStatus');
+  const preview = document.getElementById('historyImportPreview');
+  const insertRows = pendingHistoryRows;
+  preview.innerHTML = '';
+
+  status.textContent = 'Importing '+insertRows.length+' line items...';
   const batchSize = 300;
   for(let i=0;i<insertRows.length;i+=batchSize){
     const batch = insertRows.slice(i,i+batchSize);
@@ -920,7 +1029,8 @@ async function importHistoryFile(){
     await loadRequesters();
   }
 
-  status.textContent = 'Import complete: '+insertRows.length+' line items across '+groups.length+' requests.';
+  status.textContent = 'Import complete: '+insertRows.length+' line items imported.';
+  pendingHistoryRows = null;
   loadLog();
 }
 

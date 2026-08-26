@@ -46,7 +46,12 @@ create table stock_requests.requests (
   received boolean,       -- null = not yet reconciled, not "no"
   feedback text,          -- free text outcome, e.g. "Returned to Stock" / "Transferred to rejects" / "Reject"
   return_transfer_number text,
-  notes text
+  notes text,
+  deleted_at timestamptz -- soft delete: "Delete" in the app sets this instead of removing the
+                         -- row, so a mistaken delete is recoverable. Every read query filters
+                         -- deleted_at=is.null. Requesters/products stay hard-delete (low-stakes
+                         -- reference data, and requesters' unique name constraint would fight a
+                         -- soft-deleted-then-re-added row).
 );
 
 create index requests_batch_idx on stock_requests.requests(batch_id);
@@ -79,3 +84,10 @@ grant all on all sequences in schema stock_requests to anon, authenticated;
 -- One-time manual step (can't be done from SQL): in the Supabase dashboard, go to
 -- Project Settings -> Data API -> "Exposed schemas" and add "stock_requests" to the list
 -- (it starts as just "public"). Without this, PostgREST returns 404 for every request below.
+
+-- ============================================================================
+-- MIGRATION (2026-08): adds soft-delete to an already-running installation.
+-- Safe to run even though the table above already has the column in fresh installs —
+-- IF NOT EXISTS makes this a no-op there.
+-- ============================================================================
+alter table stock_requests.requests add column if not exists deleted_at timestamptz;
