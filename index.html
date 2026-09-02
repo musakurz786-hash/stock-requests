@@ -340,7 +340,9 @@ async function loadRequesters(){
 function onReqNameChange(){
   const name = document.getElementById('reqName').value;
   const r = REQUESTERS.find(x=>x.name===name);
-  if(r && r.department) document.getElementById('reqDept').value = r.department;
+  // Always sync, including clearing to blank — otherwise switching from a person WITH a saved
+  // department to one without leaves the previous person's department showing, misattributed.
+  document.getElementById('reqDept').value = (r && r.department) ? r.department : '';
   updateSubmitEnabled();
 }
 
@@ -546,13 +548,14 @@ let logRows = [];
 let deletedLogRows = [];
 let deletedLogLoaded = false;
 let logFilter = '';
+const DELETED_FETCH_LIMIT = 500;
 
 async function setLogFilter(f){
   logFilter = f;
   document.querySelectorAll('.filternav button').forEach(b=>b.classList.toggle('active', b.dataset.f===f));
   if(f === 'deleted' && !deletedLogLoaded){
     document.getElementById('logList').innerHTML = '<div class="empty">Loading...</div>';
-    deletedLogRows = await sb('GET','requests?select=*&deleted_at=not.is.null&order=deleted_at.desc&limit=500');
+    deletedLogRows = await sb('GET','requests?select=*&deleted_at=not.is.null&order=deleted_at.desc&limit='+DELETED_FETCH_LIMIT);
     deletedLogLoaded = true;
   }
   renderLog();
@@ -569,8 +572,11 @@ async function loadLog(){
 function renderDeletedLog(){
   const el = document.getElementById('logList');
   if(!deletedLogRows.length){ el.innerHTML = '<div class="empty">Nothing deleted.</div>'; return; }
+  const truncatedWarning = deletedLogRows.length >= DELETED_FETCH_LIMIT
+    ? '<div class="empty" style="color:var(--warn);text-align:left;padding:10px 0">&#9888; Showing the '+DELETED_FETCH_LIMIT+' most recently deleted — older ones exist but aren\'t loaded.</div>'
+    : '';
   const batches = groupByBatch(deletedLogRows);
-  el.innerHTML = batches.map(items=>{
+  el.innerHTML = truncatedWarning + batches.map(items=>{
     const head = items[0];
     const itemsHtml = items.map(i=>
       '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
@@ -830,17 +836,23 @@ async function confirmStockImport(){
   const preview = document.getElementById('stockImportPreview');
   const updates = pendingStockUpdates;
   preview.innerHTML = '';
-  status.textContent = 'Updating '+updates.length+' products...';
   const batchSize = 500;
-  for(let i=0;i<updates.length;i+=batchSize){
-    const batch = updates.slice(i,i+batchSize);
-    await sb('POST','products', batch, {'Prefer':'resolution=merge-duplicates,return=minimal'});
-    status.textContent = 'Updated '+Math.min(i+batchSize,updates.length)+' / '+updates.length+' products...';
+  try{
+    status.textContent = 'Updating '+updates.length+' products...';
+    for(let i=0;i<updates.length;i+=batchSize){
+      const batch = updates.slice(i,i+batchSize);
+      await sb('POST','products', batch, {'Prefer':'resolution=merge-duplicates,return=minimal'});
+      status.textContent = 'Updated '+Math.min(i+batchSize,updates.length)+' / '+updates.length+' products...';
+    }
+    status.textContent = 'Done — '+updates.length+' products updated. Reloading catalog...';
+    await loadProducts();
+    status.textContent = 'Stock import complete: '+updates.length+' products updated.';
+    pendingStockUpdates = null;
+  }catch(e){
+    console.error(e);
+    status.textContent = 'Import failed partway through — some products may already be updated. Re-run the import to retry (it\'s safe to repeat).';
+    toast('Stock import failed', true);
   }
-  status.textContent = 'Done — '+updates.length+' products updated. Reloading catalog...';
-  await loadProducts();
-  status.textContent = 'Stock import complete: '+updates.length+' products updated.';
-  pendingStockUpdates = null;
 }
 
 async function upsertProduct(){
@@ -1013,25 +1025,37 @@ async function confirmHistoryImport(){
   const insertRows = pendingHistoryRows;
   preview.innerHTML = '';
 
-  status.textContent = 'Importing '+insertRows.length+' line items...';
   const batchSize = 300;
-  for(let i=0;i<insertRows.length;i+=batchSize){
-    const batch = insertRows.slice(i,i+batchSize);
-    await sb('POST','requests', batch, {'Prefer':'return=minimal'});
-    status.textContent = 'Imported '+Math.min(i+batchSize,insertRows.length)+' / '+insertRows.length+' line items...';
-  }
+  let inserted = 0;
+  try{
+    status.textContent = 'Importing '+insertRows.length+' line items...';
+    for(let i=0;i<insertRows.length;i+=batchSize){
+      const batch = insertRows.slice(i,i+batchSize);
+      await sb('POST','requests', batch, {'Prefer':'return=minimal'});
+      inserted += batch.length;
+      status.textContent = 'Imported '+inserted+' / '+insertRows.length+' line items...';
+    }
 
-  const uniqueNames = Array.from(new Set(insertRows.map(r=>r.requester_name).filter(n=>n && n!=='Unknown')));
-  const existingNames = new Set(REQUESTERS.map(r=>r.name));
-  const newRequesters = uniqueNames.filter(n=>!existingNames.has(n)).map(n=>({name:n}));
-  if(newRequesters.length){
-    await sb('POST','requesters?on_conflict=name', newRequesters, {'Prefer':'resolution=merge-duplicates,return=minimal'});
-    await loadRequesters();
-  }
+    const uniqueNames = Array.from(new Set(insertRows.map(r=>r.requester_name).filter(n=>n && n!=='Unknown')));
+    const existingNames = new Set(REQUESTERS.map(r=>r.name));
+    const newRequesters = uniqueNames.filter(n=>!existingNames.has(n)).map(n=>({name:n}));
+    if(newRequesters.length){
+      await sb('POST','requesters?on_conflict=name', newRequesters, {'Prefer':'resolution=merge-duplicates,return=minimal'});
+      await loadRequesters();
+    }
 
-  status.textContent = 'Import complete: '+insertRows.length+' line items imported.';
-  pendingHistoryRows = null;
-  loadLog();
+    status.textContent = 'Import complete: '+insertRows.length+' line items imported.';
+    pendingHistoryRows = null;
+    loadLog();
+  }catch(e){
+    console.error(e);
+    // Unlike the stock import, this insert isn't idempotent — re-running it would duplicate
+    // whatever already landed, so don't suggest a blind retry.
+    status.textContent = inserted > 0
+      ? inserted+' of '+insertRows.length+' line items were imported before this failed — check Manage → Transfer & Recon Log before retrying, re-importing the whole file would duplicate those.'
+      : 'Import failed — nothing was written.';
+    toast('Historical import failed', true);
+  }
 }
 
 // -- Delivery confirmation (reached via ?deliver=<batch_id> link in the submission email) --
@@ -1042,7 +1066,7 @@ async function initDeliverView(batchId){
   });
   const card = document.getElementById('deliverCard');
   try{
-    const rows = await sb('GET','requests?select=*&batch_id=eq.'+encodeURIComponent(batchId));
+    const rows = await sb('GET','requests?select=*&deleted_at=is.null&batch_id=eq.'+encodeURIComponent(batchId));
     if(!rows.length){ card.innerHTML = '<div class="empty">This request link is no longer valid.</div>'; return; }
     const head = rows[0];
     const itemLines = rows.map(r=>'<div>'+escapeHtml(r.product)+' <span class="imeta">x'+r.qty+'</span></div>').join('');
@@ -1066,8 +1090,8 @@ async function confirmDelivery(batchId){
   const btn = document.getElementById('confirmDeliverBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'Confirming...'; }
   try{
-    const rows = await sb('GET','requests?select=*&batch_id=eq.'+encodeURIComponent(batchId));
-    await sb('PATCH','requests?batch_id=eq.'+encodeURIComponent(batchId), {date_completed: todayIso()});
+    const rows = await sb('GET','requests?select=*&deleted_at=is.null&batch_id=eq.'+encodeURIComponent(batchId));
+    await sb('PATCH','requests?deleted_at=is.null&batch_id=eq.'+encodeURIComponent(batchId), {date_completed: todayIso()});
     if(btn){
       btn.disabled = true;
       btn.textContent = '✓ Delivered';
