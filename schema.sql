@@ -18,6 +18,11 @@ create table stock_requests.requesters (
   department text
 );
 
+create table stock_requests.stores (
+  id bigint generated always as identity primary key,
+  name text not null unique
+);
+
 create table stock_requests.products (
   sku text primary key,
   product text not null,
@@ -33,8 +38,13 @@ create table stock_requests.requests (
   batch_id uuid not null,
   created_at timestamptz default now(),
   request_date date not null default current_date,
-  requester_name text not null,
+  requester_name text not null, -- always a person's name, whether an HQ/marketing request or a
+                                 -- store one (store_name below says which store, if any)
   department text,
+  request_type text not null default 'hq' check (request_type in ('hq','store')),
+  store_name text, -- set only when request_type='store'; free text, not FK'd to stores.name,
+                    -- same reasoning as requester_name/product: history must survive a store
+                    -- being renamed or removed from the stores list later
   reason text not null,
   expected_return_date date, -- "Date stock will be returned" on the request form; null if not a loan
   sku text, -- intentionally no FK to products: history must survive a product being discontinued
@@ -60,6 +70,7 @@ create index requests_transfer_idx on stock_requests.requests(transfer_number);
 create index products_product_idx on stock_requests.products using gin (to_tsvector('english', product));
 
 alter table stock_requests.requesters enable row level security;
+alter table stock_requests.stores enable row level security;
 alter table stock_requests.products enable row level security;
 alter table stock_requests.requests enable row level security;
 
@@ -69,6 +80,10 @@ create policy "anon read requesters" on stock_requests.requesters for select usi
 create policy "anon insert requesters" on stock_requests.requesters for insert with check (true);
 create policy "anon update requesters" on stock_requests.requesters for update using (true) with check (true);
 create policy "anon delete requesters" on stock_requests.requesters for delete using (true);
+create policy "anon read stores" on stock_requests.stores for select using (true);
+create policy "anon insert stores" on stock_requests.stores for insert with check (true);
+create policy "anon update stores" on stock_requests.stores for update using (true) with check (true);
+create policy "anon delete stores" on stock_requests.stores for delete using (true);
 create policy "anon read products" on stock_requests.products for select using (true);
 create policy "anon write products" on stock_requests.products for all using (true) with check (true);
 create policy "anon read requests" on stock_requests.requests for select using (true);
@@ -91,3 +106,29 @@ grant all on all sequences in schema stock_requests to anon, authenticated;
 -- IF NOT EXISTS makes this a no-op there.
 -- ============================================================================
 alter table stock_requests.requests add column if not exists deleted_at timestamptz;
+
+-- ============================================================================
+-- MIGRATION (2026-09): adds store requests alongside the existing HQ/marketing ones.
+-- ============================================================================
+create table if not exists stock_requests.stores (
+  id bigint generated always as identity primary key,
+  name text not null unique
+);
+alter table stock_requests.stores enable row level security;
+do $$ begin
+  create policy "anon read stores" on stock_requests.stores for select using (true);
+  create policy "anon insert stores" on stock_requests.stores for insert with check (true);
+  create policy "anon update stores" on stock_requests.stores for update using (true) with check (true);
+  create policy "anon delete stores" on stock_requests.stores for delete using (true);
+exception when duplicate_object then null; -- re-running this migration block is then a no-op
+end $$;
+grant all on stock_requests.stores to anon, authenticated;
+grant all on all sequences in schema stock_requests to anon, authenticated; -- covers the new stores_id_seq
+
+alter table stock_requests.requests add column if not exists request_type text not null default 'hq';
+alter table stock_requests.requests add column if not exists store_name text;
+do $$ begin
+  alter table stock_requests.requests add constraint requests_request_type_check
+    check (request_type in ('hq','store'));
+exception when duplicate_object then null; -- re-running this migration block is then a no-op
+end $$;

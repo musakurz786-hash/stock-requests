@@ -97,12 +97,25 @@
 
   <!-- NEW REQUEST VIEW -->
   <div id="view-request" class="view active">
+    <div class="filternav" style="margin-bottom:20px">
+      <button id="typeHq" class="active" data-f="hq" onclick="setRequestType('hq')">HQ / Marketing</button>
+      <button id="typeStore" data-f="store" onclick="setRequestType('store')">Store</button>
+    </div>
+
     <div class="row-flex">
       <div class="field"><label>Date</label><input type="date" id="reqDate"></div>
-      <div class="field"><label>Requester Name</label>
+
+      <div class="field" id="hqNameField"><label>Requester Name</label>
         <select id="reqName" onchange="onReqNameChange()"><option value="">Select your name...</option></select>
       </div>
-      <div class="field"><label>Department</label><input type="text" id="reqDept" list="departmentNames" placeholder="e.g. Marketing, Buying"></div>
+      <div class="field" id="hqDeptField"><label>Department</label><input type="text" id="reqDept" list="departmentNames" placeholder="e.g. Marketing, Buying"></div>
+
+      <div class="field" id="storeField" style="display:none"><label>Store</label>
+        <select id="reqStore" onchange="updateSubmitEnabled()"><option value="">Select store...</option></select>
+      </div>
+      <div class="field" id="storeContactField" style="display:none"><label>Your Name</label>
+        <input type="text" id="storeContactName" placeholder="Who's submitting this?" oninput="updateSubmitEnabled()">
+      </div>
     </div>
     <datalist id="departmentNames"></datalist>
 
@@ -111,12 +124,12 @@
       <textarea id="reqReason" placeholder="e.g. E-commerce Shoot, Replen Summer Campaign, Content..."></textarea>
     </div>
 
-    <div class="field">
+    <div class="field" id="returnDateField">
       <label>Date Stock Will Be Returned (optional — only if it's a loan)</label>
       <input type="date" id="reqReturnDate">
     </div>
 
-    <div class="field" style="display:flex;align-items:center;gap:8px">
+    <div class="field" id="notifyWarehouseField" style="display:flex;align-items:center;gap:8px">
       <input type="checkbox" id="notifyWarehouse" style="width:auto">
       <label style="margin:0;text-transform:none;letter-spacing:normal;font-size:13px;color:var(--ink)" for="notifyWarehouse">
         Also notify warehouse@freedomofmovement.co.za (in case the usual recipient is unavailable)
@@ -159,6 +172,7 @@
       <div class="subnav">
         <button id="subLog" class="active" onclick="showSub('log')">Transfer &amp; Recon Log</button>
         <button id="subRequesters" onclick="showSub('requesters')">Requesters</button>
+        <button id="subStores" onclick="showSub('stores')">Stores</button>
         <button id="subStock" onclick="showSub('stock')">Stock Catalog</button>
       </div>
 
@@ -199,6 +213,20 @@
         <div class="admin-section">
           <h2>Requesters</h2>
           <table class="admin" id="requestersTable"><thead><tr><th>Name</th><th>Department</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+
+      <div id="sub-stores" class="subview" style="display:none">
+        <div class="admin-section">
+          <h2>Add Store</h2>
+          <div class="row-flex">
+            <div class="field"><label>Store Name</label><input type="text" id="newStoreName"></div>
+            <button class="secondary" onclick="addStore()">Add</button>
+          </div>
+        </div>
+        <div class="admin-section">
+          <h2>Stores</h2>
+          <table class="admin" id="storesTable"><thead><tr><th>Name</th><th></th></tr></thead><tbody></tbody></table>
         </div>
       </div>
 
@@ -318,9 +346,16 @@ function groupByBatch(rows){
   });
   return Array.from(map.values()).sort((a,b)=> new Date(b[0].request_date) - new Date(a[0].request_date));
 }
+// Small badge next to a card's name — shows which store a store-type request is for instead of
+// an HQ department. Shared by the log, My Requests, and the deleted-items view.
+function requestOriginLabel(head){
+  if(head.request_type === 'store') return ' <span class="imeta">(Store: '+escapeHtml(head.store_name||'-')+')</span>';
+  return head.department ? ' <span class="imeta">('+escapeHtml(head.department)+')</span>' : '';
+}
 
 // ---------------- SHARED DATA ----------------
 let REQUESTERS = [];
+let STORES = [];
 let PRODUCTS = [];
 
 async function loadRequesters(){
@@ -346,12 +381,32 @@ function onReqNameChange(){
   updateSubmitEnabled();
 }
 
+async function loadStores(){
+  STORES = await sb('GET','stores?select=*&order=name.asc');
+  document.getElementById('reqStore').innerHTML = '<option value="">Select store...</option>' +
+    STORES.map(s=>'<option value="'+escapeHtml(s.name)+'">'+escapeHtml(s.name)+'</option>').join('');
+}
+
 async function loadProducts(){
   PRODUCTS = await sbAll('products?select=*&order=product.asc');
 }
 
 // ---------------- NEW REQUEST VIEW ----------------
 let cart = []; // {sku, product, qty}
+let currentRequestType = 'hq';
+
+function setRequestType(type){
+  currentRequestType = type;
+  document.getElementById('typeHq').classList.toggle('active', type==='hq');
+  document.getElementById('typeStore').classList.toggle('active', type==='store');
+  document.getElementById('hqNameField').style.display = type==='hq' ? '' : 'none';
+  document.getElementById('hqDeptField').style.display = type==='hq' ? '' : 'none';
+  document.getElementById('storeField').style.display = type==='store' ? '' : 'none';
+  document.getElementById('storeContactField').style.display = type==='store' ? '' : 'none';
+  document.getElementById('returnDateField').style.display = type==='hq' ? '' : 'none';
+  document.getElementById('notifyWarehouseField').style.display = type==='hq' ? '' : 'none';
+  updateSubmitEnabled();
+}
 
 function onSearch(){
   const q = document.getElementById('productSearch').value.trim().toLowerCase();
@@ -406,46 +461,71 @@ function renderCart(){
 }
 
 function updateSubmitEnabled(){
-  const name = document.getElementById('reqName').value.trim();
   const reason = document.getElementById('reqReason').value.trim();
-  document.getElementById('submitBtn').disabled = !(name && reason && cart.length);
+  const identityOk = currentRequestType === 'store'
+    ? !!document.getElementById('reqStore').value && !!document.getElementById('storeContactName').value.trim()
+    : !!document.getElementById('reqName').value.trim();
+  document.getElementById('submitBtn').disabled = !(identityOk && reason && cart.length);
 }
 document.addEventListener('input', e=>{
   if(e.target.id === 'reqReason') updateSubmitEnabled();
 });
 
 async function submitRequest(){
-  const name = document.getElementById('reqName').value.trim();
-  const department = document.getElementById('reqDept').value.trim();
   const reason = document.getElementById('reqReason').value.trim();
   const date = document.getElementById('reqDate').value || todayIso();
-  const returnDate = document.getElementById('reqReturnDate').value || null;
-  if(!name || !reason || !cart.length) return;
+
+  let name, department, storeName, returnDate;
+  if(currentRequestType === 'store'){
+    storeName = document.getElementById('reqStore').value;
+    name = document.getElementById('storeContactName').value.trim();
+    department = null;
+    returnDate = null; // stores aren't loans
+    if(!storeName || !name || !reason || !cart.length) return;
+  }else{
+    name = document.getElementById('reqName').value.trim();
+    department = document.getElementById('reqDept').value.trim();
+    storeName = null;
+    returnDate = document.getElementById('reqReturnDate').value || null;
+    if(!name || !reason || !cart.length) return;
+  }
 
   const btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = 'Submitting...';
   const batch_id = uuid();
 
   try{
+    // A store's contact person goes into the same shared requesters list as HQ staff — that's
+    // what lets them look up their own request history on My Requests without a separate,
+    // harder-to-maintain per-store staff roster.
     if(!REQUESTERS.find(r=>r.name===name)){
       await sb('POST','requesters?on_conflict=name', {name, department: department||null}, {'Prefer':'resolution=merge-duplicates,return=minimal'});
     }
     const rows = cart.map(c => ({
       batch_id, request_date: date, requester_name: name, department: department||null,
+      request_type: currentRequestType, store_name: storeName,
       reason, expected_return_date: returnDate, sku: c.sku, product: c.product, qty: c.qty
     }));
     await sb('POST','requests', rows, {'Prefer':'return=minimal'});
 
     const itemLines = cart.map(c=>c.product+' (x'+c.qty+')').join('\n');
     if(CONFIG.EMAILJS_PUBLIC_KEY && CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED){
-      const notifyWarehouse = document.getElementById('notifyWarehouse').checked;
-      const toEmails = [CONFIG.LOGISTICS_EMAIL];
-      if(notifyWarehouse && CONFIG.WAREHOUSE_EMAIL) toEmails.push(CONFIG.WAREHOUSE_EMAIL);
-      emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
-        email: toEmails.join(','), email_type: 'Stock Request Submitted', requester_name: name,
-        department: department||'-', reason, request_date: fmtDate(date), item_lines: itemLines,
-        batch_id
-      }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
+      let toEmails;
+      if(currentRequestType === 'store'){
+        toEmails = [CONFIG.STORE_ALLOCATOR_EMAIL].filter(Boolean);
+      }else{
+        toEmails = [CONFIG.LOGISTICS_EMAIL];
+        const notifyWarehouse = document.getElementById('notifyWarehouse').checked;
+        if(notifyWarehouse && CONFIG.WAREHOUSE_EMAIL) toEmails.push(CONFIG.WAREHOUSE_EMAIL);
+      }
+      if(toEmails.length){
+        emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
+          email: toEmails.join(','),
+          email_type: currentRequestType==='store' ? 'Store Stock Request Submitted' : 'Stock Request Submitted',
+          requester_name: name, department: currentRequestType==='store' ? ('Store: '+storeName) : (department||'-'),
+          reason, request_date: fmtDate(date), item_lines: itemLines, batch_id
+        }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
+      }
     }
 
     cart = [];
@@ -491,14 +571,14 @@ function renderMineList(){
       return '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
       statusBadge(computeStatus(i))+'</div>'+
       (i.transfer_number ? '<div class="imeta">Transfer '+escapeHtml(i.transfer_number)+(i.date_completed?' &middot; '+fmtDate(i.date_completed):'')+'</div>' : '')+
-      (i.transfer_number ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
+      (i.transfer_number && i.request_type !== 'store' ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
         '<select onchange="updateMyFeedback('+i.id+', this.value)">'+
           '<option value=""'+(i.feedback?'':' selected')+'>— update status —</option>'+statusOptionsHtml+
         '</select></div>' : '')+
       '</div>';
     }).join('');
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
-      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      requestOriginLabel(head)+'</div></div>'+
       '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       itemsHtml+'</div>';
@@ -535,12 +615,13 @@ function showManageBody(){
 }
 
 function showSub(name){
-  ['log','requesters','stock'].forEach(s=>{
+  ['log','requesters','stores','stock'].forEach(s=>{
     document.getElementById('sub-'+s).style.display = (s===name?'block':'none');
     document.getElementById('sub'+s[0].toUpperCase()+s.slice(1)).classList.toggle('active', s===name);
   });
   if(name==='log') loadLog();
   if(name==='requesters') loadRequestersTable();
+  if(name==='stores') loadStoresTable();
 }
 
 // -- Transfer & Recon Log --
@@ -585,7 +666,7 @@ function renderDeletedLog(){
       '</div>'
     ).join('');
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
-      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      requestOriginLabel(head)+'</div></div>'+
       '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+'</div>'+
       itemsHtml+'</div>';
@@ -613,6 +694,7 @@ function renderLog(){
   if(q) rows = rows.filter(r =>
     (r.requester_name||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) ||
     (r.transfer_number||'').toLowerCase().includes(q) || (r.reason||'').toLowerCase().includes(q) ||
+    (r.store_name||'').toLowerCase().includes(q) ||
     (r.return_transfer_number||'').toLowerCase().includes(q));
   const el = document.getElementById('logList');
   const truncatedWarning = logRows.length >= LOG_FETCH_LIMIT
@@ -646,7 +728,7 @@ function renderLog(){
       '</div>'
     ).join('');
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
-      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      requestOriginLabel(head)+'</div></div>'+
       '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       itemsHtml+'</div>';
@@ -707,11 +789,12 @@ async function deleteRequestRow(id){
 }
 
 function exportLogCsv(){
-  const header = ['Request Date','Requester','Department','Reason','Expected Return','SKU','Product','Qty',
+  const header = ['Request Date','Type','Requester','Department','Store','Reason','Expected Return','SKU','Product','Qty',
     'Transfer #','Date Completed','Recon Date','Received','Feedback','Return Transfer #'];
   const lines = [header.join(',')];
   logRows.forEach(r=>{
-    lines.push([r.request_date, r.requester_name, r.department||'', '"'+String(r.reason).replace(/"/g,'""')+'"',
+    lines.push([r.request_date, r.request_type||'hq', r.requester_name, r.department||'', r.store_name||'',
+      '"'+String(r.reason).replace(/"/g,'""')+'"',
       r.expected_return_date||'', r.sku||'', '"'+String(r.product).replace(/"/g,'""')+'"', r.qty,
       r.transfer_number||'', r.date_completed||'', r.recon_date||'', r.received==null?'':(r.received?'Yes':'No'),
       r.feedback||'', r.return_transfer_number||''].join(','));
@@ -774,6 +857,44 @@ async function deleteRequester(name){
   }catch(e){
     console.error(e);
     toast('Could not remove this requester', true);
+  }
+}
+
+// -- Stores --
+async function loadStoresTable(){
+  const rows = await sb('GET','stores?select=*&order=name.asc');
+  const tbody = document.querySelector('#storesTable tbody');
+  tbody.innerHTML = rows.map(s=>
+    '<tr><td>'+escapeHtml(s.name)+'</td>'+
+    '<td><button class="secondary small" onclick="deleteStore(\''+s.name.replace(/'/g,"\\'")+'\')">Remove</button></td></tr>'
+  ).join('');
+}
+
+async function addStore(){
+  const name = document.getElementById('newStoreName').value.trim();
+  if(!name){ toast('Enter a store name first', true); return; }
+  try{
+    await sb('POST','stores', {name}, {'Prefer':'return=minimal'});
+    document.getElementById('newStoreName').value = '';
+    await loadStores();
+    loadStoresTable();
+    toast(name+' added');
+  }catch(e){
+    console.error(e);
+    toast('Could not add store — name may already exist', true);
+  }
+}
+
+async function deleteStore(name){
+  if(!confirm('Remove '+name+' from the stores list? Their past requests stay in the log.')) return;
+  try{
+    await sb('DELETE','stores?name=eq.'+encodeURIComponent(name), null, {'Prefer':'return=minimal'});
+    await loadStores();
+    loadStoresTable();
+    toast('Removed');
+  }catch(e){
+    console.error(e);
+    toast('Could not remove this store', true);
   }
 }
 
@@ -1073,7 +1194,7 @@ async function initDeliverView(batchId){
     const alreadyDone = rows.every(r=>r.date_completed);
     card.innerHTML =
       '<div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
-      (head.department?' <span class="imeta">('+escapeHtml(head.department)+')</span>':'')+'</div></div>'+
+      requestOriginLabel(head)+'</div></div>'+
       '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+'</div>'+
       '<div style="margin:14px 0">'+itemLines+'</div>'+
@@ -1124,6 +1245,7 @@ if(deliverBatchId){
 }else{
   (async function init(){
     try{ await loadRequesters(); }catch(e){ console.error(e); toast('Could not load requesters list', true); }
+    try{ await loadStores(); }catch(e){ console.error(e); toast('Could not load stores list', true); }
     try{ await loadProducts(); }catch(e){ console.error(e); toast('Could not load product catalog', true); }
   })();
   if(sessionStorage.getItem('srManage')==='1') showManageBody();
