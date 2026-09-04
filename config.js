@@ -20,7 +20,7 @@ const CONFIG = {
 
   LOGISTICS_EMAIL: 'musa@freedomofmovement.co.za',
   WAREHOUSE_EMAIL: 'warehouse@freedomofmovement.co.za', // only cc'd when the requester ticks the opt-in checkbox
-  STORE_ALLOCATOR_EMAIL: '', // TODO: fill in — store-type requests route here instead of LOGISTICS_EMAIL
+  STORE_ALLOCATOR_EMAIL: 'fabian@freedomofmovement.co.za', // store-type requests route here instead of LOGISTICS_EMAIL
 
   ADMIN_PASSWORD: 'fom-admin-2026' // soft gate only, not real security — internal tool
 };
