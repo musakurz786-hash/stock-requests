@@ -64,6 +64,14 @@
   .filternav{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;}
   .filternav button{background:#fff;border:1px solid #ccc;padding:6px 12px;font-size:11px;border-radius:20px;cursor:pointer;font-family:inherit;}
   .filternav button.active{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .type-tiles{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;}
+  .type-tiles button{background:#fff;border:2px solid var(--brand-green);color:var(--ink);padding:12px 22px;
+    font-size:13px;font-weight:bold;letter-spacing:.5px;text-transform:uppercase;font-family:inherit;
+    border-radius:8px;cursor:pointer;box-shadow:0 3px 0 var(--brand-green);
+    transition:transform .15s ease,box-shadow .15s ease;}
+  .type-tiles button:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--brand-green);}
+  .type-tiles button:active{transform:translateY(1px);box-shadow:0 1px 0 var(--brand-green);}
+  .type-tiles button.active{background:var(--ink);color:#fff;border-color:var(--ink);box-shadow:0 3px 0 rgba(0,0,0,.5);}
   .card{border:1px solid var(--line);border-radius:4px;padding:16px 18px;margin-bottom:16px;}
   .card .card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
   .card .card-head .who{font-weight:bold;font-size:14px;}
@@ -101,7 +109,7 @@
 
   <!-- NEW REQUEST VIEW -->
   <div id="view-request" class="view active">
-    <div class="filternav" style="margin-bottom:20px">
+    <div class="type-tiles">
       <button id="typeHq" class="active" data-f="hq" onclick="setRequestType('hq')">HQ / Marketing</button>
       <button id="typeStore" data-f="store" onclick="setRequestType('store')">Store</button>
     </div>
