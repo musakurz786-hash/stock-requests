@@ -140,3 +140,84 @@ end $$;
 -- imported yet and stays requestable, 0 means out of stock and blocks it on the request form.
 -- ============================================================================
 alter table stock_requests.products add column if not exists available numeric;
+
+-- ============================================================================
+-- MIGRATION (2026-10): automatic HQ stock sync from Shopify (FOM Online), same model as Staff
+-- Allowance. Edge function: supabase/functions/sr-shopify-stock (deployed with verify_jwt off; it
+-- checks the x-sync-secret header against Vault instead). Uses the project's existing read-only
+-- Shopify secrets (SHOPIFY_CLIENT_ID / SHOPIFY_CLIENT_SECRET). Touches only stock_requests.* —
+-- the order fulfilment app's ful_* tables, functions and cron jobs in this project are separate.
+-- ============================================================================
+create table if not exists stock_requests.stock_sync_log (
+  id bigint generated always as identity primary key,
+  run_at timestamptz default now(),
+  shopify_rows integer,
+  updated_count integer,
+  status text,
+  detail text
+);
+alter table stock_requests.stock_sync_log enable row level security;
+do $$ begin
+  create policy "anon read stock_sync_log" on stock_requests.stock_sync_log for select using (true);
+exception when duplicate_object then null; end $$;
+grant select on stock_requests.stock_sync_log to anon, authenticated;
+grant all on stock_requests.stock_sync_log to service_role;
+
+-- Writes Shopify HQ "available" onto existing catalog SKUs only (never adds products).
+create or replace function stock_requests.apply_shopify_stock(items jsonb)
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare n integer;
+begin
+  update stock_requests.products p
+     set available = s.available,
+         updated_at = now()
+    from (
+      select x->>'sku' as sku, max((x->>'available')::numeric) as available
+        from jsonb_array_elements(items) x
+       where coalesce(x->>'sku','') <> ''
+       group by x->>'sku'
+    ) s
+   where p.sku = s.sku
+     and p.available is distinct from s.available;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function stock_requests.apply_shopify_stock(jsonb) from public, anon, authenticated;
+grant execute on function stock_requests.apply_shopify_stock(jsonb) to service_role;
+
+-- Shared secret between the cron job and the edge function, so only the schedule can trigger a sync.
+do $$ begin
+  if not exists (select 1 from vault.secrets where name = 'sr_stock_sync_secret') then
+    perform vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'sr_stock_sync_secret', 'Stock Requests Shopify stock sync');
+  end if;
+end $$;
+
+create or replace function stock_requests.stock_sync_secret()
+returns text language sql security definer set search_path = ''
+as $$ select decrypted_secret from vault.decrypted_secrets where name = 'sr_stock_sync_secret' $$;
+revoke all on function stock_requests.stock_sync_secret() from public, anon, authenticated;
+grant execute on function stock_requests.stock_sync_secret() to service_role;
+
+create or replace function stock_requests.trigger_shopify_stock_sync()
+returns bigint language plpgsql security definer set search_path = ''
+as $$
+declare req_id bigint;
+begin
+  select net.http_post(
+    url := 'https://wqsibegaczuhgrcjwitl.supabase.co/functions/v1/sr-shopify-stock',
+    headers := jsonb_build_object('Content-Type','application/json',
+                                  'x-sync-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'sr_stock_sync_secret')),
+    body := '{}'::jsonb,
+    timeout_milliseconds := 120000
+  ) into req_id;
+  return req_id;
+end $$;
+revoke all on function stock_requests.trigger_shopify_stock_sync() from public, anon, authenticated;
+
+grant usage on schema stock_requests to service_role;
+grant select, update on stock_requests.products to service_role;
+
+-- Every 15 min, staggered off Staff Allowance's :00/:15/:30/:45 sync (they share one Shopify app's rate limit).
+-- To stop it: select cron.unschedule('sr-shopify-stock');
+select cron.schedule('sr-shopify-stock', '7,22,37,52 * * * *', 'select stock_requests.trigger_shopify_stock_sync()');

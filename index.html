@@ -254,7 +254,8 @@
       <div id="sub-stock" class="subview" style="display:none">
         <div class="admin-section">
           <h2>Import Stock Report</h2>
-          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the "Inventory Products Stock Level Report" export (.xlsx/.csv) to populate the searchable product catalog and HQ stock levels used by the request form. Matches by SKU; new SKUs are added. Only HQ-location rows are used, and out-of-stock items can't be requested until a later import shows stock again — re-import whenever you want the numbers refreshed.</p>
+          <div id="stockSyncStatus" style="font-size:13px;font-weight:bold;margin:-8px 0 10px"></div>
+          <p style="font-size:13px;color:var(--grey);margin-top:0">HQ stock levels update automatically from Shopify (FOM Online) every 15 minutes, for products already in the catalog. Use this upload to add new products to the catalog, or as a backup if the automatic sync is down: upload the "Inventory Products Stock Level Report" export (.xlsx/.csv). Matches by SKU; new SKUs are added. Only HQ-location rows are used, and out-of-stock items can't be requested.</p>
           <input type="file" id="stockFile" accept=".xlsx,.xls,.csv">
           <button class="secondary" style="margin-top:10px" onclick="previewStockFile()">Preview Import</button>
           <div id="importStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
@@ -680,6 +681,24 @@ function showSub(name){
   if(name==='log') loadLog();
   if(name==='requesters') loadRequestersTable();
   if(name==='stores') loadStoresTable();
+  if(name==='stock') loadStockSyncStatus();
+}
+
+// Last run of the automatic Shopify (FOM Online) stock sync — sr-shopify-stock edge function, every 15 min
+async function loadStockSyncStatus(){
+  const el = document.getElementById('stockSyncStatus');
+  try{
+    const [last] = await sb('GET','stock_sync_log?select=run_at,status,shopify_rows,updated_count,detail&order=run_at.desc&limit=1');
+    if(!last){ el.textContent = 'Automatic Shopify stock sync: no runs yet.'; return; }
+    const when = new Date(last.run_at).toLocaleString('en-ZA',{dateStyle:'medium',timeStyle:'short'});
+    el.style.color = last.status==='ok' ? 'var(--good)' : 'var(--bad)';
+    el.textContent = last.status==='ok'
+      ? 'Automatic Shopify stock sync: last ran '+when+' — '+last.updated_count+' products changed.'
+      : 'Automatic Shopify stock sync FAILED at '+when+': '+(last.detail||'unknown error')+' — use the manual import below until it recovers.';
+  }catch(e){
+    console.error(e);
+    el.textContent = '';
+  }
 }
 
 // -- Transfer & Recon Log --
