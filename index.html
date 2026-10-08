@@ -41,6 +41,10 @@
   .result-row:hover{background:var(--panel);}
   .result-row .name{font-weight:bold;font-size:13px;}
   .result-row .meta{font-size:11px;color:var(--grey);margin-top:2px;}
+  .result-row .stock{font-size:11px;font-weight:bold;color:var(--grey);white-space:nowrap;}
+  .result-row .stock.none{color:var(--bad);}
+  .result-row.out{cursor:not-allowed;opacity:.55;}
+  .result-row.out:hover{background:none;}
   .empty{padding:20px;color:var(--grey);font-size:13px;text-align:center;}
   .cart{border:1px solid var(--line);border-radius:4px;margin-bottom:18px;}
   .cart-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);}
@@ -250,7 +254,7 @@
       <div id="sub-stock" class="subview" style="display:none">
         <div class="admin-section">
           <h2>Import Stock Report</h2>
-          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the "Inventory Products Stock Level Report" export (.xlsx/.csv) to populate the searchable product catalog used by the request form. Matches by SKU; new SKUs are added.</p>
+          <p style="font-size:13px;color:var(--grey);margin-top:-8px">Upload the "Inventory Products Stock Level Report" export (.xlsx/.csv) to populate the searchable product catalog and HQ stock levels used by the request form. Matches by SKU; new SKUs are added. Only HQ-location rows are used, and out-of-stock items can't be requested until a later import shows stock again — re-import whenever you want the numbers refreshed.</p>
           <input type="file" id="stockFile" accept=".xlsx,.xls,.csv">
           <button class="secondary" style="margin-top:10px" onclick="previewStockFile()">Preview Import</button>
           <div id="importStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
@@ -408,6 +412,17 @@ async function loadProducts(){
   PRODUCTS = await sbAll('products?select=*&order=product.asc');
 }
 
+// HQ stock on hand, or null when this SKU has never had stock imported (unknown — still
+// requestable, so manually added products and pre-import catalogs keep working).
+function stockOf(p){
+  if(!p || p.available === null || p.available === undefined) return null;
+  return Math.max(0, Math.floor(Number(p.available)||0));
+}
+function stockLabel(p){
+  const s = stockOf(p);
+  return s === null ? '' : (s > 0 ? s+' available' : 'Out of stock');
+}
+
 // ---------------- NEW REQUEST VIEW ----------------
 let cart = []; // {sku, product, qty}
 let currentRequestType = 'hq';
@@ -432,19 +447,27 @@ function onSearch(){
   const matches = PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,100);
   results.style.display='block';
   if(!matches.length){ results.innerHTML = '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
-  results.innerHTML = matches.map(p =>
-    '<div class="result-row" onclick="addToCart(\''+p.sku.replace(/'/g,"\\'")+'\')">'+
+  results.innerHTML = matches.map(p => {
+    const out = stockOf(p) === 0;
+    const stock = stockLabel(p);
+    return '<div class="result-row'+(out?' out':'')+'"'+(out?'':' onclick="addToCart(\''+p.sku.replace(/'/g,"\\'")+'\')"')+'>'+
       '<div><div class="name">'+escapeHtml(p.product)+'</div>'+
-      '<div class="meta">SKU '+escapeHtml(p.sku)+' &middot; '+escapeHtml(p.category||'')+'</div></div>'+
-    '</div>'
-  ).join('');
+      '<div class="meta">SKU '+escapeHtml(p.sku)+(p.category?' &middot; '+escapeHtml(p.category):'')+'</div></div>'+
+      (stock?'<div class="stock'+(out?' none':'')+'">'+stock+'</div>':'')+
+    '</div>';
+  }).join('');
 }
 
 function addToCart(sku){
   const p = PRODUCTS.find(x=>x.sku===sku);
   if(!p) return;
+  const stock = stockOf(p);
+  if(stock === 0){ toast(p.product+' is out of stock', true); return; }
   const existing = cart.find(c=>c.sku===sku);
-  if(existing){ existing.qty += 1; }
+  if(existing){
+    if(stock !== null && existing.qty >= stock){ toast('Only '+stock+' of '+p.product+' available', true); return; }
+    existing.qty += 1;
+  }
   else{ cart.push({sku:p.sku, product:p.product, qty:1}); }
   document.getElementById('productSearch').value = '';
   document.getElementById('results').style.display = 'none';
@@ -453,8 +476,14 @@ function addToCart(sku){
 }
 
 function updateCartQty(idx, qty){
-  cart[idx].qty = Math.max(1, parseInt(qty)||1);
-  updateSubmitEnabled();
+  let n = Math.max(1, parseInt(qty)||1);
+  const stock = stockOf(PRODUCTS.find(x=>x.sku===cart[idx].sku));
+  if(stock !== null && n > stock){
+    n = Math.max(1, stock);
+    toast('Only '+stock+' of '+cart[idx].product+' available', true);
+  }
+  cart[idx].qty = n;
+  renderCart();
 }
 
 function removeFromCart(idx){
@@ -467,13 +496,15 @@ function renderCart(){
   const cartEl = document.getElementById('cart');
   if(!cart.length){ wrap.style.display='none'; cartEl.innerHTML=''; updateSubmitEnabled(); return; }
   wrap.style.display='block';
-  cartEl.innerHTML = cart.map((c,idx)=>
-    '<div class="cart-row">'+
-      '<div class="name">'+escapeHtml(c.product)+(c.sku?'<div class="meta">SKU '+escapeHtml(c.sku)+'</div>':'')+'</div>'+
-      '<input type="number" min="1" value="'+c.qty+'" onchange="updateCartQty('+idx+', this.value)">'+
+  cartEl.innerHTML = cart.map((c,idx)=>{
+    const p = PRODUCTS.find(x=>x.sku===c.sku);
+    const stock = stockOf(p);
+    return '<div class="cart-row">'+
+      '<div class="name">'+escapeHtml(c.product)+(c.sku?'<div class="meta">SKU '+escapeHtml(c.sku)+(stock!==null?' &middot; '+stockLabel(p):'')+'</div>':'')+'</div>'+
+      '<input type="number" min="1"'+(stock?' max="'+stock+'"':'')+' value="'+c.qty+'" onchange="updateCartQty('+idx+', this.value)">'+
       '<button class="rm" onclick="removeFromCart('+idx+')" title="Remove">&times;</button>'+
-    '</div>'
-  ).join('');
+    '</div>';
+  }).join('');
   updateSubmitEnabled();
 }
 
@@ -512,6 +543,16 @@ async function submitRequest(){
   const batch_id = uuid();
 
   try{
+    // Re-check against the latest stock — the catalog may have been re-imported since this page
+    // loaded, and the cart quantities were only validated against the stock seen at that time.
+    await loadProducts();
+    const short = cart.filter(c => { const s = stockOf(PRODUCTS.find(x=>x.sku===c.sku)); return s !== null && c.qty > s; });
+    if(short.length){
+      renderCart();
+      toast('Not enough stock for: '+short.map(c=>c.product+' ('+stockLabel(PRODUCTS.find(x=>x.sku===c.sku)).toLowerCase()+')').join(', '), true);
+      return;
+    }
+
     // A store's contact person goes into the same shared requesters list as HQ staff — that's
     // what lets them look up their own request history on My Requests without a separate,
     // harder-to-maintain per-store staff roster.
@@ -940,31 +981,60 @@ async function previewStockFile(){
   // Matches "Category", "Product Category", "Categories", etc. — exact-match on 'category' was
   // missing real-world export column names that don't literally read just "category".
   const catCol = header.findIndex(h => h.includes('categ'));
+  // Same stock rules as the Staff Allowance app's Cin7 stock import: "Available" (falling back to
+  // "Stock On Hand"), and HQ rows only when the report covers several locations.
+  const availCol = header.indexOf('available') >= 0 ? header.indexOf('available') : header.indexOf('stock on hand');
+  const locationCol = header.indexOf('location');
 
+  // without the catalog every SKU would look "new" and lose its existing category/name fallback
+  if(!PRODUCTS.length && !confirm('The product catalog is empty (or didn\'t load). Import anyway as a fresh catalog?')){ status.textContent = ''; return; }
   const existingBySku = {};
   PRODUCTS.forEach(p => existingBySku[p.sku] = p);
 
-  const updates = [];
-  let newCount = 0, existingCount = 0;
+  // non-merchandise rows (services, hardware, fees) — never requestable; same filter as Staff Allowance
+  const nonMerchSku = /^(curbon-offset|10001|GiftCard|Gift-card.*|R\d+-Personalisation|ShippingEconomyDomesticRoadFreight|ShippingFlatRate)$/i;
+  const nonMerchProduct = /^(Repairs?[:\s]|Zebra |RFD40|RFID |3yrs Zebra|Power Supply Brick|DC Cable For|Personalisation:|.*license fees)/i;
+
+  // keyed by SKU so a repeated SKU can't put two rows for the same key in one upsert batch
+  // (Postgres rejects that), last row wins
+  const bySku = {};
+  let skippedJunk = 0, skippedLocation = 0;
   for(let i=headerIdx+1;i<rows.length;i++){
     const r = rows[i];
     const sku = r[skuCol] ? String(r[skuCol]).trim() : '';
     if(!sku) continue;
+    if(locationCol >= 0){
+      const loc = String(r[locationCol]||'').trim().toUpperCase();
+      if(loc && loc !== 'HQ'){ skippedLocation++; continue; }
+    }
+    const productName = productCol >= 0 ? String(r[productCol]||'').trim() : '';
+    if(nonMerchSku.test(sku) || nonMerchProduct.test(productName)){ skippedJunk++; continue; }
     const existing = existingBySku[sku];
-    if(existing) existingCount++; else newCount++;
-    updates.push({
-      sku, product: (r[productCol]||(existing?existing.product:'')),
+    bySku[sku] = {
+      sku, product: productName || (existing?existing.product:'') || sku,
       category: catCol>=0 ? (r[catCol]||(existing?existing.category:null)) : (existing?existing.category:null),
-      subcat: existing?existing.subcat:null, updated_at: new Date().toISOString()
-    });
+      subcat: existing?existing.subcat:null,
+      available: availCol>=0 ? (Number(r[availCol])||0) : (existing?existing.available:null),
+      updated_at: new Date().toISOString()
+    };
   }
+  const updates = Object.values(bySku);
+  const newCount = updates.filter(u => !existingBySku[u.sku]).length;
+  const existingCount = updates.length - newCount;
+  const outCount = availCol>=0 ? updates.filter(u => u.available <= 0).length : 0;
 
-  if(!updates.length){ status.textContent = 'No rows with a SKU found in this file.'; return; }
+  if(!updates.length){ status.textContent = 'No rows with a SKU found in this file.'+(skippedLocation?' ('+skippedLocation+' non-HQ location rows skipped.)':''); return; }
   pendingStockUpdates = updates;
   status.textContent = '';
+  const notes = [];
+  if(availCol<0) notes.push('no Available / Stock On Hand column found — stock levels left unchanged');
+  else notes.push('<b>'+outCount+'</b> will show as out of stock');
+  if(catCol<0) notes.push('no Category column found — category left unchanged');
+  if(locationCol>=0) notes.push(skippedLocation+' non-HQ location rows skipped');
+  if(skippedJunk) notes.push(skippedJunk+' non-merchandise rows skipped');
   preview.innerHTML =
     '<div class="empty" style="text-align:left">This will update <b>'+updates.length+'</b> products — '+
-    '<b>'+newCount+'</b> new, <b>'+existingCount+'</b> existing'+(catCol<0?' (no Category column found in this file — category left unchanged)':'')+'.</div>'+
+    '<b>'+newCount+'</b> new, <b>'+existingCount+'</b> existing ('+notes.join('; ')+').</div>'+
     '<button class="primary" style="margin-top:10px" onclick="confirmStockImport()">Confirm Import</button>';
 }
 
@@ -1022,6 +1092,7 @@ function onStockSearch(){
   results.innerHTML = matches.map(p =>
     '<div class="result-row" style="cursor:default">'+
       '<div><div class="name">'+escapeHtml(p.product)+'</div><div class="meta">SKU '+escapeHtml(p.sku)+' &middot; '+escapeHtml(p.category||'')+'</div></div>'+
+      '<div class="stock'+(stockOf(p)===0?' none':'')+'">'+(stockLabel(p)||'Stock not imported')+'</div>'+
     '</div>'
   ).join('');
 }

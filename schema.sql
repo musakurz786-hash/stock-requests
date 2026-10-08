@@ -28,6 +28,7 @@ create table stock_requests.products (
   product text not null,
   category text,
   subcat text,
+  available numeric, -- HQ stock on hand from the Cin7 stock report; null = never imported (unknown, still requestable)
   updated_at timestamptz default now()
 );
 
@@ -132,3 +133,10 @@ do $$ begin
     check (request_type in ('hq','store'));
 exception when duplicate_object then null; -- re-running this migration block is then a no-op
 end $$;
+
+-- ============================================================================
+-- MIGRATION (2026-10): HQ stock levels, same model as the Staff Allowance app. Filled by the
+-- admin "Import Stock Report" (HQ location rows only); null means the SKU hasn't had stock
+-- imported yet and stays requestable, 0 means out of stock and blocks it on the request form.
+-- ============================================================================
+alter table stock_requests.products add column if not exists available numeric;
