@@ -549,7 +549,11 @@ function showView(name){
   if(name==='manage' && sessionStorage.getItem('srManage')==='1') showManageBody();
 }
 
+// Feedback value set by Manage's "Invoice Out" button: the stock was invoiced out rather than
+// transferred/returned, so the request is settled even without a transfer number.
+const INVOICED_OUT = 'Invoiced out';
 function computeStatus(r){
+  if(r.feedback === INVOICED_OUT) return 'reconciled';
   if(!r.transfer_number) return 'awaiting';
   // "Still holding onto it" is a requester self-report that it's explicitly NOT settled yet —
   // must not count as reconciled just because the feedback field is non-empty.
@@ -557,9 +561,9 @@ function computeStatus(r){
   if(r.feedback || r.return_transfer_number) return 'reconciled';
   return 'transferred';
 }
-function statusBadge(status){
+function statusBadge(status, r){
   const labels = {awaiting:'Awaiting Transfer', transferred:'Transferred', reconciled:'Reconciled'};
-  return '<span class="badge '+status+'">'+labels[status]+'</span>';
+  return '<span class="badge '+status+'">'+(r && r.feedback === INVOICED_OUT ? 'Invoiced Out' : labels[status])+'</span>';
 }
 function groupByBatch(rows){
   const map = new Map();
@@ -1017,9 +1021,10 @@ function renderMineList(){
       const statusOptionsHtml = MINE_STATUS_OPTIONS.map(o=>
         '<option value="'+escapeHtml(o)+'"'+(i.feedback===o?' selected':'')+'>'+escapeHtml(o)+'</option>').join('');
       return '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
-      statusBadge(computeStatus(i))+'</div>'+
+      statusBadge(computeStatus(i), i)+'</div>'+
       (i.transfer_number ? '<div class="imeta">Transfer '+escapeHtml(i.transfer_number)+(i.date_completed?' &middot; '+fmtDate(i.date_completed):'')+'</div>' : '')+
-      (i.transfer_number && i.request_type !== 'store' ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
+      (i.feedback === INVOICED_OUT ? '<div class="imeta" style="color:var(--good)">&#10003; Invoiced out'+(i.recon_date?' '+fmtDate(i.recon_date):'')+' — nothing more to do</div>' : '')+
+      (i.transfer_number && i.request_type !== 'store' && i.feedback !== INVOICED_OUT ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
         '<select onchange="updateMyFeedback('+i.id+', this.value)">'+
           '<option value=""'+(i.feedback?'':' selected')+'>— update status —</option>'+statusOptionsHtml+
         '</select></div>' : '')+
@@ -1191,7 +1196,7 @@ function renderLog(){
     const head = items[0];
     const itemsHtml = items.map(i=>
       '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+(i.sku?' &middot; SKU '+escapeHtml(i.sku):'')+'</span></span>'+
-      statusBadge(computeStatus(i))+'</div>'+
+      statusBadge(computeStatus(i), i)+'</div>'+
       '<div class="logistics-grid">'+
         '<div class="lf"><label>Transfer #</label><input type="text" value="'+escapeHtml(i.transfer_number||'')+'" onblur="saveField('+i.id+',\'transfer_number\',this.value)"></div>'+
         '<div class="lf"><label>Date Completed</label><input type="date" value="'+(i.date_completed||'')+'" onchange="saveField('+i.id+',\'date_completed\',this.value)"></div>'+
@@ -1216,11 +1221,14 @@ function renderLog(){
       requestOriginLabel(head)+'</div></div>'+
       '<div style="display:flex;align-items:center;gap:10px">'+
         '<button class="secondary small" onclick="exportCin7Transfer(\''+head.batch_id+'\')" title="Download this request as a Cin7 stock transfer lines import">Export for Cin7</button>'+
+        (logRows.filter(r=>r.batch_id===head.batch_id).every(r=>r.feedback===INVOICED_OUT)
+          ? '<span class="imeta" style="color:var(--good)">&#10003; Invoiced out</span>'
+          : '<button class="secondary small" onclick="invoiceOutBatch(\''+head.batch_id+'\')" title="Mark every item in this request as invoiced out, which settles it">Invoice Out</button>')+
         '<div class="when">'+fmtDate(head.request_date)+'</div>'+
       '</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       itemsHtml+'</div>';
-  }).join('') + '<datalist id="feedbackOptions"><option value="Returned to Stock"><option value="Transferred to rejects"><option value="Reject"></datalist>';
+  }).join('') + '<datalist id="feedbackOptions"><option value="Returned to Stock"><option value="Transferred to rejects"><option value="Reject"><option value="'+INVOICED_OUT+'"></datalist>';
 }
 
 async function saveField(id, field, value){
@@ -1258,6 +1266,27 @@ async function markDelivered(id){
   }catch(e){
     console.error(e);
     toast('Could not mark this delivered', true);
+  }
+}
+
+// "Invoice Out" — settles a whole request in one go: every (non-deleted) item gets Feedback
+// "Invoiced out" and Recon Date today, which counts as Reconciled even with no transfer number.
+// Undo per item by clearing its Feedback field.
+async function invoiceOutBatch(batchId){
+  const items = logRows.filter(r => r.batch_id === batchId);
+  if(!items.length) return;
+  const head = items[0];
+  if(!confirm('Invoice out '+head.requester_name+'\'s request from '+fmtDate(head.request_date)+' ('+items.length+' item'+(items.length===1?'':'s')+')?\n\n'+
+    'Every item is marked "Invoiced out" with today as the recon date, which clears the request.')) return;
+  const payload = {feedback: INVOICED_OUT, recon_date: todayIso()};
+  try{
+    await sb('PATCH','requests?deleted_at=is.null&batch_id=eq.'+encodeURIComponent(batchId), payload);
+    items.forEach(r => Object.assign(r, payload));
+    renderLog();
+    toast('Invoiced out — request cleared');
+  }catch(e){
+    console.error(e);
+    toast('Could not invoice out this request', true);
   }
 }
 
