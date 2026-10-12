@@ -221,3 +221,110 @@ grant select, update on stock_requests.products to service_role;
 -- Every 15 min, staggered off Staff Allowance's :00/:15/:30/:45 sync (they share one Shopify app's rate limit).
 -- To stop it: select cron.unschedule('sr-shopify-stock');
 select cron.schedule('sr-shopify-stock', '7,22,37,52 * * * *', 'select stock_requests.trigger_shopify_stock_sync()');
+
+-- ============================================================================
+-- MIGRATION (2026-10): nightly product photos from freedomofmovement.co.za's public product feed,
+-- same two-step pg_net design as Staff Allowance (photo-sync-fix-migration.sql there): the queue
+-- step commits so pg_net actually sends the requests, the apply step reads the stored responses
+-- 10 minutes later. A partial feed (any page failed) changes nothing. Only stock_requests.*.
+-- To stop it: select cron.unschedule('sr-photos-queue'); select cron.unschedule('sr-photos-apply');
+-- ============================================================================
+alter table stock_requests.products add column if not exists image_url text;
+
+create table if not exists stock_requests.photo_sync_log (
+  id bigint generated always as identity primary key,
+  run_at timestamptz not null default now(),
+  pages_fetched int not null default 0,
+  updated_count int not null default 0,
+  status text not null,
+  detail text
+);
+alter table stock_requests.photo_sync_log enable row level security;
+do $$ begin
+  create policy "anon read photo_sync_log" on stock_requests.photo_sync_log for select using (true);
+exception when duplicate_object then null; end $$;
+grant select on stock_requests.photo_sync_log to anon, authenticated;
+
+create table if not exists stock_requests.photo_sync_pending (
+  request_id bigint primary key,
+  page int not null,
+  queued_at timestamptz not null default now()
+);
+alter table stock_requests.photo_sync_pending enable row level security; -- no policies: only the functions below touch it
+
+create or replace function stock_requests.sync_product_photos_queue() returns void
+language plpgsql security definer set search_path = ''
+as $$
+begin
+  delete from stock_requests.photo_sync_pending;
+  insert into stock_requests.photo_sync_pending(request_id, page)
+  select net.http_get(
+           url := 'https://www.freedomofmovement.co.za/products.json?limit=250&page=' || p,
+           timeout_milliseconds := 30000),
+         p
+  from generate_series(1, 12) p;
+end $$;
+
+create or replace function stock_requests.sync_product_photos_apply() returns void
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_queued int; v_problem text; v_pages int; v_count int;
+begin
+  select count(*) into v_queued from stock_requests.photo_sync_pending;
+  if v_queued = 0 then
+    insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+    values (0, 0, 'error', 'Nothing queued: sync_product_photos_queue() did not run before this step');
+    return;
+  end if;
+
+  select string_agg('Page '||q.page||': '||case
+           when r.id is null then 'no response yet'
+           when r.timed_out then 'timed out'
+           else 'status '||coalesce(r.status_code::text,'null')||' '||coalesce(r.error_msg,'') end, '; ' order by q.page)
+    into v_problem
+  from stock_requests.photo_sync_pending q left join net._http_response r on r.id = q.request_id
+  where r.id is null or r.timed_out or r.status_code is distinct from 200;
+
+  if v_problem is not null then
+    insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+    values (0, 0, 'error', v_problem);
+    delete from stock_requests.photo_sync_pending;
+    return;
+  end if;
+
+  select count(*) into v_pages
+  from stock_requests.photo_sync_pending q join net._http_response r on r.id = q.request_id
+  where jsonb_array_length(coalesce(r.content::jsonb->'products','[]'::jsonb)) > 0;
+
+  -- one photo per SKU: the product's first image, applied to every variant SKU under it
+  with var as (
+    select distinct on (v->>'sku') v->>'sku' as sku, prod->'images'->0->>'src' as image_url
+    from stock_requests.photo_sync_pending q
+    join net._http_response r on r.id = q.request_id,
+    jsonb_array_elements(coalesce(r.content::jsonb->'products','[]'::jsonb)) with ordinality as pr(prod, pos),
+    jsonb_array_elements(coalesce(prod->'variants','[]'::jsonb)) as v
+    where coalesce(v->>'sku','') <> ''
+      and jsonb_array_length(coalesce(prod->'images','[]'::jsonb)) > 0
+    order by v->>'sku', q.page, pr.pos
+  )
+  update stock_requests.products p
+  set image_url = var.image_url, updated_at = now()
+  from var
+  where p.sku = var.sku and p.image_url is distinct from var.image_url;
+  get diagnostics v_count = row_count;
+
+  delete from stock_requests.photo_sync_pending;
+  insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+  values (v_pages, v_count, 'ok', null);
+exception when others then
+  insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+  values (0, 0, 'error', sqlerrm);
+end $$;
+
+revoke all on function stock_requests.sync_product_photos_queue() from public, anon, authenticated;
+revoke all on function stock_requests.sync_product_photos_apply() from public, anon, authenticated;
+
+-- 03:20 / 03:30 UTC = 05:20 / 05:30 SAST, after Staff Allowance's 03:00/03:10 photo sync
+select cron.schedule('sr-photos-queue', '20 3 * * *', $$select stock_requests.sync_product_photos_queue();$$);
+select cron.schedule('sr-photos-apply', '30 3 * * *', $$select stock_requests.sync_product_photos_apply();$$);

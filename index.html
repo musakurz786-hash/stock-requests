@@ -86,6 +86,33 @@
   .result-row.out:hover{background:none;}
   .empty{padding:20px;color:var(--grey);font-size:13px;text-align:center;}
 
+  /* Request-form product browsing — Staff Allowance's photo-card grid. Photos come from the nightly
+     website photo sync; products not on the website show the faint FOM mark instead. */
+  .product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;max-height:560px;overflow-y:auto;padding:2px;margin-bottom:20px;animation:flowIn .4s cubic-bezier(.2,.8,.2,1);}
+  .product-grid .empty{grid-column:1/-1;background:var(--card);border:1px solid var(--line);border-radius:var(--radius-inner);}
+  .product-card{position:relative;background:var(--card);border:1px solid var(--line);border-radius:20px;overflow:hidden;
+    transition:border-color .15s ease;animation:flowIn .45s cubic-bezier(.2,.8,.2,1) backwards;}
+  .product-card:nth-child(2){animation-delay:.03s;} .product-card:nth-child(3){animation-delay:.06s;}
+  .product-card:nth-child(4){animation-delay:.09s;} .product-card:nth-child(5){animation-delay:.12s;}
+  .product-card:nth-child(6){animation-delay:.15s;} .product-card:nth-child(n+7){animation-delay:.18s;}
+  .product-card:not(.out):hover{border-color:rgba(255,255,255,.18);}
+  .product-card .photo{width:100%;aspect-ratio:1/1;background:var(--panel);display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .product-card .photo img{width:100%;height:100%;object-fit:cover;display:block;}
+  .product-card .photo img.mark{width:44px;height:44px;object-fit:contain;opacity:.18;filter:brightness(0) invert(1);}
+  .product-card.out .photo{opacity:.4;}
+  .product-card .info{padding:12px 14px 14px;}
+  .product-card .name{font-size:13px;font-weight:600;line-height:1.35;min-height:2.7em;}
+  .product-card .meta{font-size:11px;color:var(--grey);margin:4px 0 10px;}
+  .product-card .foot{display:flex;justify-content:space-between;align-items:center;gap:6px 8px;flex-wrap:wrap;}
+  .product-card .stock{font-weight:600;font-size:12px;color:var(--grey);}
+  .product-card.out .stock{color:var(--bad);}
+  .product-card button.add{background:var(--ink);color:var(--cream);border:none;padding:6px 14px;border-radius:999px;font-size:12px;
+    font-weight:500;font-family:inherit;white-space:nowrap;cursor:pointer;transition:opacity .15s ease;}
+  .product-card button.add:hover{opacity:.85;}
+  .cart-row .thumb{width:44px;height:44px;border-radius:12px;background:var(--panel);overflow:hidden;flex:none;display:flex;align-items:center;justify-content:center;}
+  .cart-row .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .cart-row .thumb img.mark{width:20px;height:20px;object-fit:contain;opacity:.2;filter:brightness(0) invert(1);}
+
   #cartWrap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-card);padding:24px;margin-bottom:8px;animation:flowIn .35s ease;}
   #cartWrap h2{margin-bottom:12px;}
   .cart{border:1px solid var(--line);border-radius:var(--radius-inner);overflow:hidden;}
@@ -235,7 +262,7 @@
       <input type="text" id="productSearch" autocomplete="off" placeholder="e.g. Corduroy Overshirt, Tekkie, Vellies..." oninput="onSearch()">
     </div>
 
-    <div id="results" class="results" style="display:none"></div>
+    <div id="results" class="product-grid" style="display:none"></div>
 
     <div id="cartWrap" style="display:none">
       <h2>Request Cart</h2>
@@ -332,7 +359,8 @@
       <div id="sub-stock" class="subview" style="display:none">
         <div class="admin-section">
           <h2>Import Stock Report</h2>
-          <div id="stockSyncStatus" style="font-size:13px;font-weight:bold;margin:-8px 0 10px"></div>
+          <div id="stockSyncStatus" style="font-size:13px;font-weight:bold;margin:-8px 0 6px"></div>
+          <div id="photoSyncStatus" style="font-size:13px;font-weight:bold;margin:0 0 10px"></div>
           <p style="font-size:13px;color:var(--grey);margin-top:0">HQ stock levels update automatically from Shopify (FOM Online) every 15 minutes, for products already in the catalog. Use this upload to add new products to the catalog, or as a backup if the automatic sync is down: upload the "Inventory Products Stock Level Report" export (.xlsx/.csv). Matches by SKU; new SKUs are added. Only HQ-location rows are used, and out-of-stock items can't be requested.</p>
           <input type="file" id="stockFile" accept=".xlsx,.xls,.csv">
           <button class="secondary" style="margin-top:10px" onclick="previewStockFile()">Preview Import</button>
@@ -527,18 +555,36 @@ function onSearch(){
   const q = document.getElementById('productSearch').value.trim().toLowerCase();
   const results = document.getElementById('results');
   if(q.length < 2){ results.style.display='none'; results.innerHTML=''; return; }
-  const matches = PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,100);
-  results.style.display='block';
+  // requestable items first (stable sort keeps them A–Z within each group), out-of-stock after
+  const matches = PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q))
+    .sort((a,b) => (stockOf(b)>0) - (stockOf(a)>0)).slice(0,100);
+  results.style.display='grid';
   if(!matches.length){ results.innerHTML = '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
   results.innerHTML = matches.map(p => {
     const out = stockOf(p) === 0;
-    const stock = stockLabel(p);
-    return '<div class="result-row'+(out?' out':'')+'"'+(out?'':' onclick="addToCart(\''+p.sku.replace(/'/g,"\\'")+'\')"')+'>'+
-      '<div><div class="name">'+escapeHtml(p.product)+'</div>'+
-      '<div class="meta">SKU '+escapeHtml(p.sku)+(p.category?' &middot; '+escapeHtml(p.category):'')+'</div></div>'+
-      (stock?'<div class="stock'+(out?' none':'')+'">'+stock+'</div>':'')+
+    return '<div class="product-card'+(out?' out':'')+'">'+
+      '<div class="photo">'+photoHtml(p)+'</div>'+
+      '<div class="info">'+
+        '<div class="name">'+escapeHtml(p.product)+'</div>'+
+        '<div class="meta">SKU '+escapeHtml(p.sku)+(p.category?' &middot; '+escapeHtml(p.category):'')+'</div>'+
+        '<div class="foot">'+
+          '<div class="stock">'+stockLabel(p)+'</div>'+
+          (out?'':'<button class="add" onclick="addToCart(\''+p.sku.replace(/\\/g,'\\\\').replace(/'/g,"\\'")+'\')">+ Add</button>')+
+        '</div>'+
+      '</div>'+
     '</div>';
   }).join('');
+}
+
+// Product photo from the nightly website photo sync, or the faint FOM mark for products that
+// aren't on the website. Only https URLs are used — the feed is external data.
+const FOM_MARK = 'https://www.freedomofmovement.co.za/cdn/shop/files/favicon.png?v=1760790002&width=80';
+function photoHtml(p){
+  const url = p && p.image_url;
+  return (url && /^https:\/\//i.test(url))
+    // Shopify's CDN resizes on request — a 300px copy instead of the full-size original
+    ? '<img src="'+escapeHtml(/[?&]width=/.test(url) ? url : url+(url.includes('?')?'&':'?')+'width=300')+'" alt="" loading="lazy">'
+    : '<img class="mark" src="'+FOM_MARK+'" alt="">';
 }
 
 function addToCart(sku){
@@ -583,6 +629,7 @@ function renderCart(){
     const p = PRODUCTS.find(x=>x.sku===c.sku);
     const stock = stockOf(p);
     return '<div class="cart-row">'+
+      '<div class="thumb">'+photoHtml(p)+'</div>'+
       '<div class="name">'+escapeHtml(c.product)+(c.sku?'<div class="meta">SKU '+escapeHtml(c.sku)+' &middot; '+stockLabel(p)+'</div>':'')+'</div>'+
       '<input type="number" min="1"'+(stock?' max="'+stock+'"':'')+' value="'+c.qty+'" onchange="updateCartQty('+idx+', this.value)">'+
       '<button class="rm" onclick="removeFromCart('+idx+')" title="Remove">&times;</button>'+
@@ -777,6 +824,25 @@ async function loadStockSyncStatus(){
     el.textContent = last.status==='ok'
       ? 'Automatic Shopify stock sync: last ran '+when+' — '+last.updated_count+' products changed.'
       : 'Automatic Shopify stock sync FAILED at '+when+': '+(last.detail||'unknown error')+' — use the manual import below until it recovers.';
+  }catch(e){
+    console.error(e);
+    el.textContent = '';
+  }
+  loadPhotoSyncStatus();
+}
+
+// Last run of the nightly website photo sync (stock_requests.sync_product_photos_*, 05:20/05:30 SAST)
+async function loadPhotoSyncStatus(){
+  const el = document.getElementById('photoSyncStatus');
+  try{
+    const [last] = await sb('GET','photo_sync_log?select=run_at,status,updated_count,detail&order=run_at.desc&limit=1');
+    const withPhoto = PRODUCTS.filter(p => p.image_url).length;
+    if(!last){ el.textContent = 'Nightly photo sync: no runs yet.'; return; }
+    const when = new Date(last.run_at).toLocaleString('en-ZA',{dateStyle:'medium',timeStyle:'short'});
+    el.style.color = last.status==='ok' ? 'var(--good)' : 'var(--bad)';
+    el.textContent = last.status==='ok'
+      ? 'Nightly photo sync: last ran '+when+' — '+last.updated_count+' photos changed; '+withPhoto+' of '+PRODUCTS.length+' products have a photo.'
+      : 'Nightly photo sync FAILED at '+when+': '+(last.detail||'unknown error')+'. Existing photos are kept.';
   }catch(e){
     console.error(e);
     el.textContent = '';
