@@ -329,8 +329,17 @@
       <textarea id="reqReason" placeholder="e.g. E-commerce Shoot, Replen Summer Campaign, Content..."></textarea>
     </div>
 
-    <div class="field" id="returnDateField">
-      <label>Date Stock Will Be Returned (optional — only if it's a loan)</label>
+    <div class="field" id="afterUseField">
+      <label>After use, this stock will be</label>
+      <div class="choice-row" id="afterUseChoices" style="margin-top:0">
+        <button type="button" class="secondary small" data-v="return" onclick="setAfterUse('return')">Returned</button>
+        <button type="button" class="secondary small" data-v="stays" onclick="setAfterUse('stays')">Not returned</button>
+        <button type="button" class="secondary small" data-v="invoice" onclick="setAfterUse('invoice')">Invoiced out</button>
+      </div>
+    </div>
+
+    <div class="field" id="returnDateField" style="display:none">
+      <label>Date Stock Will Be Returned (optional)</label>
       <input type="date" id="reqReturnDate">
     </div>
 
@@ -623,7 +632,9 @@ function computeStatus(r){
 function statusBadge(status, r){
   const labels = {awaiting:'Awaiting Transfer', transferred:'Transferred', reconciled:'Reconciled'};
   const byFeedback = {[INVOICED_OUT]:'Invoiced Out', [NOT_RETURNED]:'Not Returned', [INVOICE_REQUESTED]:'Invoice Requested', [STAYS_IN_LOCATION]:'Not Returning'};
-  const label = (r && r.feedback === RETURNED) ? (r.return_transfer_number ? 'Back in Stock' : 'Returning')
+  // a plan chosen at request time doesn't replace "Awaiting Transfer" until the stock has actually gone out
+  const label = status === 'awaiting' ? labels.awaiting
+    : (r && r.feedback === RETURNED) ? (r.return_transfer_number ? 'Back in Stock' : 'Returning')
     : (r && byFeedback[r.feedback]) || labels[status];
   return '<span class="badge '+status+'">'+label+'</span>';
 }
@@ -860,7 +871,8 @@ function setRequestType(type){
   document.getElementById('hqDeptField').style.display = type==='hq' ? '' : 'none';
   document.getElementById('storeField').style.display = type==='store' ? '' : 'none';
   document.getElementById('storeContactField').style.display = type==='store' ? '' : 'none';
-  document.getElementById('returnDateField').style.display = type==='hq' ? '' : 'none';
+  document.getElementById('afterUseField').style.display = type==='hq' ? '' : 'none';
+  document.getElementById('returnDateField').style.display = type==='hq' && afterUsePlan==='return' ? '' : 'none';
   document.getElementById('notifyWarehouseField').style.display = type==='hq' ? '' : 'none';
   updateSubmitEnabled();
 }
@@ -965,11 +977,29 @@ function renderCart(){
   updateSubmitEnabled();
 }
 
+// What happens to the stock after use, chosen up front on HQ requests (required). "Not returned" and
+// "Invoiced out" are saved as the items' choice straight away (same values as the My Requests buttons,
+// so they land on Manage > Returns Sheet once transferred); "Returned" only asks for the return date —
+// nothing counts as returned until it actually comes back.
+let afterUsePlan = null;
+const AFTER_USE = {
+  return:  {label: 'Returned',     feedback: null},
+  stays:   {label: 'Not returned', feedback: STAYS_IN_LOCATION},
+  invoice: {label: 'Invoiced out', feedback: INVOICE_REQUESTED}
+};
+function setAfterUse(v){
+  afterUsePlan = v;
+  document.querySelectorAll('#afterUseChoices button').forEach(b => b.classList.toggle('chosen', b.dataset.v === v));
+  document.getElementById('returnDateField').style.display = v === 'return' ? '' : 'none';
+  if(v !== 'return') document.getElementById('reqReturnDate').value = '';
+  updateSubmitEnabled();
+}
+
 function updateSubmitEnabled(){
   const reason = document.getElementById('reqReason').value.trim();
   const identityOk = currentRequestType === 'store'
     ? !!document.getElementById('reqStore').value && !!document.getElementById('storeContactName').value.trim()
-    : !!document.getElementById('reqName').value.trim();
+    : !!document.getElementById('reqName').value.trim() && !!afterUsePlan;
   document.getElementById('submitBtn').disabled = !(identityOk && reason && cart.length);
 }
 document.addEventListener('input', e=>{
@@ -991,9 +1021,11 @@ async function submitRequest(){
     name = document.getElementById('reqName').value.trim();
     department = document.getElementById('reqDept').value.trim();
     storeName = null;
-    returnDate = document.getElementById('reqReturnDate').value || null;
+    returnDate = afterUsePlan === 'return' ? (document.getElementById('reqReturnDate').value || null) : null;
     if(!name || !reason || !cart.length) return;
+    if(!afterUsePlan){ toast('Choose what happens to the stock after use', true); return; }
   }
+  const plan = currentRequestType === 'store' ? null : AFTER_USE[afterUsePlan];
 
   const btn = document.getElementById('submitBtn');
   btn.disabled = true; btn.textContent = 'Submitting...';
@@ -1019,7 +1051,8 @@ async function submitRequest(){
     const rows = cart.map(c => ({
       batch_id, request_date: date, requester_name: name, department: department||null,
       request_type: currentRequestType, store_name: storeName,
-      reason, expected_return_date: returnDate, sku: c.sku, product: c.product, qty: c.qty
+      reason, expected_return_date: returnDate, sku: c.sku, product: c.product, qty: c.qty,
+      feedback: plan ? plan.feedback : null
     }));
     await sb('POST','requests', rows, {'Prefer':'return=minimal'});
 
@@ -1038,7 +1071,8 @@ async function submitRequest(){
           email: toEmails.join(','),
           email_type: currentRequestType==='store' ? 'Store Stock Request Submitted' : 'Stock Request Submitted',
           requester_name: name, department: currentRequestType==='store' ? ('Store: '+storeName) : (department||'-'),
-          reason, request_date: fmtDate(date), item_lines: itemLines, batch_id
+          reason: reason + (plan ? ' — after use: '+plan.label+(returnDate?' by '+fmtDate(returnDate):'') : ''),
+          request_date: fmtDate(date), item_lines: itemLines, batch_id
         }, {publicKey: CONFIG.EMAILJS_PUBLIC_KEY}).catch(e=>console.error(e));
       }
     }
@@ -1046,7 +1080,7 @@ async function submitRequest(){
     cart = [];
     renderCart();
     document.getElementById('reqReason').value = '';
-    document.getElementById('reqReturnDate').value = '';
+    setAfterUse(null);
     document.getElementById('notifyWarehouse').checked = false;
     clearFilter(); // back to the tiles, search cleared
     await loadRequesters();
@@ -1098,6 +1132,10 @@ function renderMineList(){
       statusBadge(computeStatus(i), i)+'</div>'+
       (i.transfer_number ? '<div class="imeta">Transfer '+escapeHtml(i.transfer_number)+(i.date_completed?' &middot; '+fmtDate(i.date_completed):'')+'</div>' : '')+
       (settled ? '<div class="imeta" style="color:var(--good)">&#10003; '+settled+' — nothing more to do</div>' : '')+
+      // plan chosen when requesting, shown until the stock goes out (then the buttons below take over)
+      (!i.transfer_number && (i.feedback === STAYS_IN_LOCATION || i.feedback === INVOICE_REQUESTED)
+        ? '<div class="imeta">After use: '+(i.feedback === STAYS_IN_LOCATION ? 'not returned' : 'invoice out')+'</div>'
+        : (!i.transfer_number && i.expected_return_date ? '<div class="imeta">After use: returned by '+fmtDate(i.expected_return_date)+'</div>' : ''))+
       choices+
       '</div>';
     }).join('');
