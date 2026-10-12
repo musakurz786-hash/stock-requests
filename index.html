@@ -332,7 +332,7 @@
     <div class="field" id="afterUseField">
       <label>After use, this stock will be</label>
       <div class="choice-row" id="afterUseChoices" style="margin-top:0">
-        <button type="button" class="secondary small" data-v="return" onclick="setAfterUse('return')">Returned</button>
+        <button type="button" class="secondary small" data-v="return" onclick="setAfterUse('return')">Will be returned</button>
         <button type="button" class="secondary small" data-v="stays" onclick="setAfterUse('stays')">Not returned</button>
         <button type="button" class="secondary small" data-v="invoice" onclick="setAfterUse('invoice')">Invoiced out</button>
       </div>
@@ -386,7 +386,7 @@
       <label>Requester Name</label>
       <select id="mineName" onchange="loadMyRequests()"><option value="">Select your name...</option></select>
     </div>
-    <p style="font-size:13px;color:var(--grey);margin:-8px 0 18px">For stock you've received, tell us what's happening to each item: <b>Return</b> it to stock, it <b>will not be returned</b> (stays where it is), or <b>invoice it out</b>.</p>
+    <p style="font-size:13px;color:var(--grey);margin:-8px 0 18px">For stock you've received, tell us what's happening to each item: tap <b>Returned</b> once you've brought it back (Musa then transfers it back into stock), <b>Will not be returned</b> if it stays where it is, or <b>Invoice out</b>.</p>
     <div id="mineList"></div>
   </div>
 
@@ -621,7 +621,7 @@ const RETURNED = 'Returned to Stock';
 const STAYS_IN_LOCATION = 'Not returning it';
 const INVOICE_REQUESTED = 'Invoice out requested';
 const REQUESTER_CHOICES = [
-  {value: RETURNED, label: 'Return'},
+  {value: RETURNED, label: 'Returned'},
   {value: STAYS_IN_LOCATION, label: 'Will not be returned'},
   {value: INVOICE_REQUESTED, label: 'Invoice out'}
 ];
@@ -640,7 +640,7 @@ function statusBadge(status, r){
   const byFeedback = {[INVOICED_OUT]:'Invoiced Out', [NOT_RETURNED]:'Not Returned', [INVOICE_REQUESTED]:'Invoice Requested', [STAYS_IN_LOCATION]:'Not Returning'};
   // a plan chosen at request time doesn't replace "Awaiting Transfer" until the stock has actually gone out
   const label = status === 'awaiting' ? labels.awaiting
-    : (r && r.feedback === RETURNED) ? (r.return_transfer_number ? 'Back in Stock' : 'Returning')
+    : (r && r.feedback === RETURNED) ? (r.return_transfer_number ? 'Back in Stock' : 'Returned')
     : (r && byFeedback[r.feedback]) || labels[status];
   return '<span class="badge '+status+'">'+label+'</span>';
 }
@@ -989,7 +989,7 @@ function renderCart(){
 // nothing counts as returned until it actually comes back.
 let afterUsePlan = null;
 const AFTER_USE = {
-  return:  {label: 'Returned',     feedback: null},
+  return:  {label: 'Will be returned', feedback: null},
   stays:   {label: 'Not returned', feedback: STAYS_IN_LOCATION},
   invoice: {label: 'Invoiced out', feedback: INVOICE_REQUESTED}
 };
@@ -1141,7 +1141,7 @@ function renderMineList(){
       // plan chosen when requesting, shown until the stock goes out (then the buttons below take over)
       (!i.transfer_number && (i.feedback === STAYS_IN_LOCATION || i.feedback === INVOICE_REQUESTED)
         ? '<div class="imeta">After use: '+(i.feedback === STAYS_IN_LOCATION ? 'not returned' : 'invoice out')+'</div>'
-        : (!i.transfer_number && i.expected_return_date ? '<div class="imeta">After use: returned by '+fmtDate(i.expected_return_date)+'</div>' : ''))+
+        : (!i.transfer_number && i.expected_return_date ? '<div class="imeta">After use: will be returned by '+fmtDate(i.expected_return_date)+'</div>' : ''))+
       choices+
       '</div>';
     }).join('');
