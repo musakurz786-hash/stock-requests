@@ -392,6 +392,7 @@
     <div id="manageBody" style="display:none">
       <div class="subnav">
         <button id="subLog" class="active" onclick="showSub('log')">Transfer &amp; Recon Log</button>
+        <button id="subPeople" onclick="showSub('people')">By Person</button>
         <button id="subRequesters" onclick="showSub('requesters')">Requesters</button>
         <button id="subStores" onclick="showSub('stores')">Stores</button>
         <button id="subStock" onclick="showSub('stock')">Stock Catalog</button>
@@ -420,6 +421,19 @@
           <div id="historyImportStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
           <div id="historyImportPreview" style="margin-top:10px"></div>
         </div>
+      </div>
+
+      <div id="sub-people" class="subview" style="display:none">
+        <div class="row-flex searchbar">
+          <div class="field"><input type="text" id="peopleSearch" autocomplete="off" placeholder="Search by person or product..." oninput="renderPeople()"></div>
+          <button class="secondary" onclick="loadPeople()">Refresh</button>
+        </div>
+        <h2>To put back into stock</h2>
+        <p style="font-size:13px;color:var(--grey);margin-top:-8px">Marked returned (by you or the requester) but no Return Transfer # yet. Put it back, then enter the Return TR to finish.</p>
+        <div id="putBackList"></div>
+        <h2 style="margin-top:28px">Still out, by person</h2>
+        <p style="font-size:13px;color:var(--grey);margin-top:-8px">Transferred and not yet settled. Mark items Returned (they move up to "To put back into stock") or Invoice Out (settled, nothing to put back).</p>
+        <div id="peopleList"></div>
       </div>
 
       <div id="sub-requesters" class="subview" style="display:none">
@@ -1068,11 +1082,12 @@ function showManageBody(){
 }
 
 function showSub(name){
-  ['log','requesters','stores','stock'].forEach(s=>{
+  ['log','people','requesters','stores','stock'].forEach(s=>{
     document.getElementById('sub-'+s).style.display = (s===name?'block':'none');
     document.getElementById('sub'+s[0].toUpperCase()+s.slice(1)).classList.toggle('active', s===name);
   });
   if(name==='log') loadLog();
+  if(name==='people') loadPeople();
   if(name==='requesters') loadRequestersTable();
   if(name==='stores') loadStoresTable();
   if(name==='stock') loadStockSyncStatus();
@@ -1360,24 +1375,157 @@ function exportCin7Transfer(batchId){
   const items = logRows.filter(r => r.batch_id === batchId);
   if(!items.length){ toast('Could not find this request — refresh the log and try again', true); return; }
   const head = items[0];
+  const who = head.request_type === 'store' ? (head.store_name+' ('+head.requester_name+')') : head.requester_name;
+  downloadCin7Lines(items, () => 'Stock request '+fmtDate(head.request_date)+' - '+who+' - '+(head.reason||''),
+    'StockTransferLines-'+cin7SafeName(who)+'-'+head.request_date+'.csv');
+}
+
+function cin7SafeName(s){ return String(s||'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+
+// Writes request lines as a Cin7 StockTransferLines file (template header, CRLF, no BOM).
+// commentFor(row) gives each line's Comments value; items without a SKU are left out.
+function downloadCin7Lines(items, commentFor, filename){
   const withSku = items.filter(r => (r.sku||'').trim());
   const skipped = items.length - withSku.length;
   if(!withSku.length){ toast('None of these items have a SKU, so Cin7 can\'t import them', true); return; }
-
   const csvCell = v => { const s = String(v==null?'':v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
-  const who = head.request_type === 'store' ? (head.store_name+' ('+head.requester_name+')') : head.requester_name;
-  const comment = 'Stock request '+fmtDate(head.request_date)+' - '+who+' - '+(head.reason||'');
   const lines = [['SKU','Name','BatchSerialNumber','ExpiryDate_YYYYMMDD','Transfer Quantity','Comments','Location'].join(',')];
-  withSku.forEach(r => lines.push([r.sku.trim(), r.product, '', '', r.qty, comment, CIN7_TRANSFER_LOCATION].map(csvCell).join(',')));
+  withSku.forEach(r => lines.push([r.sku.trim(), r.product, '', '', r.qty, commentFor(r), CIN7_TRANSFER_LOCATION].map(csvCell).join(',')));
 
   const blob = new Blob([lines.join('\r\n')+'\r\n'], {type:'text/csv'});
   const a = document.createElement('a');
-  const safe = s => String(s||'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
   a.href = URL.createObjectURL(blob);
-  a.download = 'StockTransferLines-'+safe(who)+'-'+head.request_date+'.csv';
+  a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast(skipped ? 'Exported '+withSku.length+' item'+(withSku.length===1?'':'s')+' — '+skipped+' without a SKU '+(skipped===1?'was':'were')+' left out' : 'Exported '+withSku.length+' item'+(withSku.length===1?'':'s')+' for Cin7');
+  const n = withSku.length+' item'+(withSku.length===1?'':'s');
+  toast(skipped ? 'Exported '+n+' — '+skipped+' without a SKU '+(skipped===1?'was':'were')+' left out' : 'Exported '+n+' for Cin7');
+}
+
+// ---- By Person: what's still out with whom, and what has to go back into stock ----
+// "Still out" = transferred, not invoiced out / returned / given a Return TR. A requester's own
+// "Still holding onto it" or "Not returning it" report keeps it here (the latter flagged — usually
+// one to invoice out). "To put back" = went out on a TR, marked Returned to Stock, no Return
+// Transfer # yet. (Requiring a TR leaves out the 2025 spreadsheet history, which recorded returns
+// without TRs and was settled long ago.)
+const RETURNED = 'Returned to Stock';
+let peopleRows = [];
+function isStillOut(r){
+  return !!r.transfer_number && !r.return_transfer_number &&
+    (!r.feedback || r.feedback === 'Still holding onto it' || r.feedback === 'Not returning it');
+}
+function isToPutBack(r){ return !!r.transfer_number && r.feedback === RETURNED && !r.return_transfer_number; }
+
+async function loadPeople(){
+  document.getElementById('peopleList').innerHTML = '<div class="empty">Loading...</div>';
+  document.getElementById('putBackList').innerHTML = '';
+  try{
+    peopleRows = await sbAll('requests?select=*&deleted_at=is.null&return_transfer_number=is.null&transfer_number=not.is.null&order=request_date.asc');
+    renderPeople();
+  }catch(e){
+    console.error(e);
+    document.getElementById('peopleList').innerHTML = '<div class="empty">Could not load requests.</div>';
+  }
+}
+
+function groupByPerson(rows){
+  const map = new Map();
+  rows.forEach(r => { const k = r.requester_name||'(unknown)'; if(!map.has(k)) map.set(k, []); map.get(k).push(r); });
+  return Array.from(map.entries()).sort((a,b) => a[0].localeCompare(b[0]));
+}
+
+function idsArg(rows){ return '['+rows.map(r=>r.id).join(',')+']'; }
+
+function renderPeople(){
+  const q = document.getElementById('peopleSearch').value.trim().toLowerCase();
+  const match = r => !q || (r.requester_name||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) || (r.sku||'').toLowerCase().includes(q);
+  const itemLine = (r, actions) =>
+    '<div class="item-block"><div class="iname"><span>'+escapeHtml(r.product)+' <span class="imeta">x'+r.qty+(r.sku?' &middot; SKU '+escapeHtml(r.sku):'')+'</span></span>'+
+      '<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+actions+'</span></div>'+
+    '<div class="imeta">'+fmtDate(r.request_date)+(r.transfer_number?' &middot; '+escapeHtml(r.transfer_number):'')+' &middot; '+escapeHtml(r.reason||'')+
+      (r.expected_return_date?' &middot; due back '+fmtDate(r.expected_return_date):'')+
+      (r.feedback==='Still holding onto it'?' &middot; <span style="color:var(--warn)">says still holding it</span>':'')+
+      (r.feedback==='Not returning it'?' &middot; <span style="color:var(--warn)">says not returning it — invoice out?</span>':'')+'</div></div>';
+
+  const putBack = groupByPerson(peopleRows.filter(r => isToPutBack(r) && match(r)));
+  document.getElementById('putBackList').innerHTML = putBack.length ? putBack.map(([who, rows]) =>
+    '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(who)+'</div>'+
+      '<div class="imeta">'+rows.length+' item'+(rows.length===1?'':'s')+' to put back</div></div>'+
+      '<button class="secondary small" onclick="exportCin7Returns('+idsArg(rows)+')" title="Download these items as a Cin7 stock transfer lines import">Export for Cin7</button></div>'+
+    '<div class="field" style="max-width:320px;margin:4px 0 6px"><label>Return Transfer # (all these items)</label>'+
+      '<input type="text" placeholder="e.g. TR-12345 — finishes them" onblur="saveReturnTransfer('+idsArg(rows)+', this.value)"></div>'+
+    rows.map(r => itemLine(r, '<button class="secondary small" onclick="undoReturned('+r.id+')" title="Put this item back on the Still out list">Undo</button>')).join('')+
+    '</div>').join('') : '<div class="empty" style="text-align:left;padding:4px 0 8px">Nothing waiting to go back into stock.</div>';
+
+  const out = groupByPerson(peopleRows.filter(r => isStillOut(r) && match(r)));
+  document.getElementById('peopleList').innerHTML = out.length ? out.map(([who, rows]) => {
+    const units = rows.reduce((s,r) => s + (Number(r.qty)||0), 0);
+    return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(who)+'</div>'+
+        '<div class="imeta">'+rows.length+' item'+(rows.length===1?'':'s')+' &middot; '+units+' unit'+(units===1?'':'s')+' still out</div></div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button class="secondary small" onclick="markReturned('+idsArg(rows)+', true)">All returned</button>'+
+          '<button class="secondary small" onclick="invoiceOutItems('+idsArg(rows)+', true)">Invoice out all</button>'+
+        '</div></div>'+
+      rows.map(r => itemLine(r,
+        '<button class="secondary small" onclick="markReturned(['+r.id+'])">Returned</button>'+
+        '<button class="secondary small" onclick="invoiceOutItems(['+r.id+'])">Invoice Out</button>')).join('')+
+      '</div>';
+  }).join('') : '<div class="empty" style="text-align:left;padding:4px 0">Nobody has stock out'+(q?' matching "'+escapeHtml(q)+'"':'')+'.</div>';
+}
+
+async function patchRequestIds(ids, payload){
+  await sb('PATCH','requests?id=in.('+ids.join(',')+')', payload);
+  peopleRows.forEach(r => { if(ids.includes(r.id)) Object.assign(r, payload); });
+  logRows.forEach(r => { if(ids.includes(r.id)) Object.assign(r, payload); });
+}
+
+function peopleSummary(ids){
+  const rows = peopleRows.filter(r => ids.includes(r.id));
+  return (rows[0] ? rows[0].requester_name : '')+' — '+rows.length+' item'+(rows.length===1?'':'s');
+}
+
+async function markReturned(ids, all){
+  if(all && !confirm('Mark everything '+peopleSummary(ids)+' as returned?\n\nThey move to "To put back into stock" until you enter the Return Transfer #.')) return;
+  try{
+    await patchRequestIds(ids, {feedback: RETURNED, received: true, recon_date: todayIso()});
+    renderPeople();
+    toast('Marked returned — now listed under To put back into stock');
+  }catch(e){ console.error(e); toast('Could not mark that returned', true); }
+}
+
+async function invoiceOutItems(ids, all){
+  if(all && !confirm('Invoice out everything '+peopleSummary(ids)+'?\n\nEach item is marked "Invoiced out" with today as the recon date, which settles it.')) return;
+  try{
+    await patchRequestIds(ids, {feedback: INVOICED_OUT, recon_date: todayIso()});
+    renderPeople();
+    toast('Invoiced out');
+  }catch(e){ console.error(e); toast('Could not invoice that out', true); }
+}
+
+async function undoReturned(id){
+  try{
+    await patchRequestIds([id], {feedback: null, received: null, recon_date: null});
+    renderPeople();
+    toast('Back on the Still out list');
+  }catch(e){ console.error(e); toast('Could not undo that', true); }
+}
+
+async function saveReturnTransfer(ids, value){
+  const tr = value.trim();
+  if(!tr) return;
+  try{
+    await patchRequestIds(ids, {return_transfer_number: tr});
+    renderPeople();
+    toast('Return TR saved — '+ids.length+' item'+(ids.length===1?'':'s')+' finished');
+  }catch(e){ console.error(e); toast('Could not save the Return Transfer #', true); }
+}
+
+function exportCin7Returns(ids){
+  const rows = peopleRows.filter(r => ids.includes(r.id));
+  if(!rows.length) return;
+  const who = rows[0].requester_name;
+  downloadCin7Lines(rows, r => 'Return to stock '+fmtDate(todayIso())+' - '+who+' - from request '+fmtDate(r.request_date)+(r.transfer_number?' ('+r.transfer_number+')':''),
+    'StockTransferLines-Return-'+cin7SafeName(who)+'-'+todayIso()+'.csv');
 }
 
 // -- Requesters --
