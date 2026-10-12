@@ -298,7 +298,7 @@
       </div>
     </div>
 
-    <div class="type-tiles">
+    <div class="type-tiles" id="typeTiles">
       <button id="typeHq" class="active" data-f="hq" onclick="setRequestType('hq')">HQ / Marketing</button>
       <button id="typeStore" data-f="store" onclick="setRequestType('store')">Store</button>
     </div>
@@ -1785,6 +1785,15 @@ async function confirmDelivery(batchId){
 // ---------------- INIT ----------------
 if(CONFIG.EMAILJS_PUBLIC_KEY && window.emailjs) emailjs.init({publicKey: CONFIG.EMAILJS_PUBLIC_KEY});
 document.getElementById('reqDate').value = todayIso();
+// Store requests aren't in use yet — hide the HQ / Store switch and the Manage > Stores tab, so every
+// new request is HQ / Marketing. All the store code stays in place: set this to true to bring it back.
+const STORE_REQUESTS_ENABLED = false;
+if(!STORE_REQUESTS_ENABLED){
+  document.getElementById('typeTiles').style.display = 'none';
+  document.getElementById('subStores').style.display = 'none';
+  setRequestType('hq');
+}
+
 const deliverBatchId = new URLSearchParams(location.search).get('deliver');
 if(deliverBatchId){
   initDeliverView(deliverBatchId);
