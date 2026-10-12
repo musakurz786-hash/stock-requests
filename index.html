@@ -425,15 +425,20 @@
 
       <div id="sub-people" class="subview" style="display:none">
         <div class="row-flex searchbar">
+          <div class="field" style="max-width:240px"><select id="peoplePerson" onchange="renderPeople()"><option value="">All people</option></select></div>
           <div class="field"><input type="text" id="peopleSearch" autocomplete="off" placeholder="Search by person or product..." oninput="renderPeople()"></div>
           <button class="secondary" onclick="loadPeople()">Refresh</button>
         </div>
+        <p style="font-size:12px;color:var(--grey);margin:-6px 0 18px">These buttons only update the request records — stock levels always come from the Shopify sync.</p>
         <h2>To put back into stock</h2>
         <p style="font-size:13px;color:var(--grey);margin-top:-8px">Marked returned (by you or the requester) but no Return Transfer # yet. Put it back, then enter the Return TR to finish.</p>
         <div id="putBackList"></div>
         <h2 style="margin-top:28px">Still out, by person</h2>
-        <p style="font-size:13px;color:var(--grey);margin-top:-8px">Transferred and not yet settled. Mark items Returned (they move up to "To put back into stock") or Invoice Out (settled, nothing to put back).</p>
+        <p style="font-size:13px;color:var(--grey);margin-top:-8px">Transferred and not yet settled. Tick items and mark them Returned (they move up to "To put back into stock"), Not returned (settled, kept below for reference) or Invoice Out.</p>
         <div id="peopleList"></div>
+        <h2 style="margin-top:28px">Not returned</h2>
+        <p style="font-size:13px;color:var(--grey);margin-top:-8px">Settled as not returned — kept here for reference if any queries come up.</p>
+        <div id="notReturnedList"></div>
       </div>
 
       <div id="sub-requesters" class="subview" style="display:none">
@@ -566,6 +571,9 @@ function showView(name){
 // Feedback value set by Manage's "Invoice Out" button: the stock was invoiced out rather than
 // transferred/returned, so the request is settled even without a transfer number.
 const INVOICED_OUT = 'Invoiced out';
+// Feedback value set by Manage > By Person's "Not returned": not coming back, not invoiced either —
+// settled (counts as Reconciled) and listed under "Not returned" for reference.
+const NOT_RETURNED = 'Not returned';
 function computeStatus(r){
   if(r.feedback === INVOICED_OUT) return 'reconciled';
   if(!r.transfer_number) return 'awaiting';
@@ -577,7 +585,8 @@ function computeStatus(r){
 }
 function statusBadge(status, r){
   const labels = {awaiting:'Awaiting Transfer', transferred:'Transferred', reconciled:'Reconciled'};
-  return '<span class="badge '+status+'">'+(r && r.feedback === INVOICED_OUT ? 'Invoiced Out' : labels[status])+'</span>';
+  const label = r && r.feedback === INVOICED_OUT ? 'Invoiced Out' : r && r.feedback === NOT_RETURNED ? 'Not Returned' : labels[status];
+  return '<span class="badge '+status+'">'+label+'</span>';
 }
 function groupByBatch(rows){
   const map = new Map();
@@ -1037,8 +1046,9 @@ function renderMineList(){
       return '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
       statusBadge(computeStatus(i), i)+'</div>'+
       (i.transfer_number ? '<div class="imeta">Transfer '+escapeHtml(i.transfer_number)+(i.date_completed?' &middot; '+fmtDate(i.date_completed):'')+'</div>' : '')+
-      (i.feedback === INVOICED_OUT ? '<div class="imeta" style="color:var(--good)">&#10003; Invoiced out'+(i.recon_date?' '+fmtDate(i.recon_date):'')+' — nothing more to do</div>' : '')+
-      (i.transfer_number && i.request_type !== 'store' && i.feedback !== INVOICED_OUT ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
+      (i.feedback === INVOICED_OUT || i.feedback === NOT_RETURNED
+        ? '<div class="imeta" style="color:var(--good)">&#10003; '+(i.feedback === INVOICED_OUT ? 'Invoiced out' : 'Marked not returned')+(i.recon_date?' '+fmtDate(i.recon_date):'')+' — nothing more to do</div>' : '')+
+      (i.transfer_number && i.request_type !== 'store' && i.feedback !== INVOICED_OUT && i.feedback !== NOT_RETURNED ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
         '<select onchange="updateMyFeedback('+i.id+', this.value)">'+
           '<option value=""'+(i.feedback?'':' selected')+'>— update status —</option>'+statusOptionsHtml+
         '</select></div>' : '')+
@@ -1243,7 +1253,7 @@ function renderLog(){
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       batchTransferField(head.batch_id)+
       itemsHtml+'</div>';
-  }).join('') + '<datalist id="feedbackOptions"><option value="Returned to Stock"><option value="Transferred to rejects"><option value="Reject"><option value="'+INVOICED_OUT+'"></datalist>';
+  }).join('') + '<datalist id="feedbackOptions"><option value="Returned to Stock"><option value="Transferred to rejects"><option value="Reject"><option value="'+INVOICED_OUT+'"><option value="'+NOT_RETURNED+'"></datalist>';
 }
 
 // One Transfer # (TR) per request — a request moves as a single Cin7 transfer, so the number is set
@@ -1415,6 +1425,7 @@ function isStillOut(r){
     (!r.feedback || r.feedback === 'Still holding onto it' || r.feedback === 'Not returning it');
 }
 function isToPutBack(r){ return !!r.transfer_number && r.feedback === RETURNED && !r.return_transfer_number; }
+function isNotReturned(r){ return r.feedback === NOT_RETURNED; }
 
 async function loadPeople(){
   document.getElementById('peopleList').innerHTML = '<div class="empty">Loading...</div>';
@@ -1437,15 +1448,28 @@ function groupByPerson(rows){
 function idsArg(rows){ return '['+rows.map(r=>r.id).join(',')+']'; }
 
 function renderPeople(){
+  // person picker: everyone with something still out, to put back, or marked not returned
+  const sel = document.getElementById('peoplePerson');
+  const names = Array.from(new Set(peopleRows.filter(r => isStillOut(r) || isToPutBack(r) || isNotReturned(r))
+    .map(r => r.requester_name||'(unknown)'))).sort((a,b) => a.localeCompare(b));
+  const picked = names.includes(sel.value) ? sel.value : '';
+  sel.innerHTML = '<option value="">All people</option>' + names.map(n => '<option value="'+escapeHtml(n)+'">'+escapeHtml(n)+'</option>').join('');
+  sel.value = picked;
+
   const q = document.getElementById('peopleSearch').value.trim().toLowerCase();
-  const match = r => !q || (r.requester_name||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) || (r.sku||'').toLowerCase().includes(q);
-  const itemLine = (r, actions) =>
-    '<div class="item-block"><div class="iname"><span>'+escapeHtml(r.product)+' <span class="imeta">x'+r.qty+(r.sku?' &middot; SKU '+escapeHtml(r.sku):'')+'</span></span>'+
+  const match = r => (!picked || (r.requester_name||'(unknown)') === picked) &&
+    (!q || (r.requester_name||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) || (r.sku||'').toLowerCase().includes(q));
+  const itemLine = (r, actions, pick) =>
+    '<div class="item-block"><div class="iname"><span>'+
+      (pick ? '<label style="display:inline-flex;align-items:center;gap:8px;margin:0;font-weight:600;font-size:13px;cursor:pointer">'+
+        '<input type="checkbox" class="pick" value="'+r.id+'">' : '')+
+      escapeHtml(r.product)+' <span class="imeta">x'+r.qty+(r.sku?' &middot; SKU '+escapeHtml(r.sku):'')+'</span>'+(pick?'</label>':'')+'</span>'+
       '<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+actions+'</span></div>'+
     '<div class="imeta">'+fmtDate(r.request_date)+(r.transfer_number?' &middot; '+escapeHtml(r.transfer_number):'')+' &middot; '+escapeHtml(r.reason||'')+
       (r.expected_return_date?' &middot; due back '+fmtDate(r.expected_return_date):'')+
       (r.feedback==='Still holding onto it'?' &middot; <span style="color:var(--warn)">says still holding it</span>':'')+
-      (r.feedback==='Not returning it'?' &middot; <span style="color:var(--warn)">says not returning it — invoice out?</span>':'')+'</div></div>';
+      (r.feedback==='Not returning it'?' &middot; <span style="color:var(--warn)">says not returning it</span>':'')+
+      (isNotReturned(r)&&r.recon_date?' &middot; marked not returned '+fmtDate(r.recon_date):'')+'</div></div>';
 
   const putBack = groupByPerson(peopleRows.filter(r => isToPutBack(r) && match(r)));
   document.getElementById('putBackList').innerHTML = putBack.length ? putBack.map(([who, rows]) =>
@@ -1454,23 +1478,44 @@ function renderPeople(){
       '<button class="secondary small" onclick="exportCin7Returns('+idsArg(rows)+')" title="Download these items as a Cin7 stock transfer lines import">Export for Cin7</button></div>'+
     '<div class="field" style="max-width:320px;margin:4px 0 6px"><label>Return Transfer # (all these items)</label>'+
       '<input type="text" placeholder="e.g. TR-12345 — finishes them" onblur="saveReturnTransfer('+idsArg(rows)+', this.value)"></div>'+
-    rows.map(r => itemLine(r, '<button class="secondary small" onclick="undoReturned('+r.id+')" title="Put this item back on the Still out list">Undo</button>')).join('')+
+    rows.map(r => itemLine(r, '<button class="secondary small" onclick="undoOutcome('+r.id+')" title="Put this item back on the Still out list">Undo</button>')).join('')+
     '</div>').join('') : '<div class="empty" style="text-align:left;padding:4px 0 8px">Nothing waiting to go back into stock.</div>';
 
   const out = groupByPerson(peopleRows.filter(r => isStillOut(r) && match(r)));
   document.getElementById('peopleList').innerHTML = out.length ? out.map(([who, rows]) => {
     const units = rows.reduce((s,r) => s + (Number(r.qty)||0), 0);
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(who)+'</div>'+
-        '<div class="imeta">'+rows.length+' item'+(rows.length===1?'':'s')+' &middot; '+units+' unit'+(units===1?'':'s')+' still out</div></div>'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-          '<button class="secondary small" onclick="markReturned('+idsArg(rows)+', true)">All returned</button>'+
-          '<button class="secondary small" onclick="invoiceOutItems('+idsArg(rows)+', true)">Invoice out all</button>'+
-        '</div></div>'+
+        '<div class="imeta">'+rows.length+' item'+(rows.length===1?'':'s')+' &middot; '+units+' unit'+(units===1?'':'s')+' still out</div></div></div>'+
+      // tick items, then one of these — acts on the ticked items in this person's card only
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">'+
+        '<label style="display:inline-flex;align-items:center;gap:8px;margin:0 6px 0 0;font-weight:500;font-size:13px;cursor:pointer">'+
+          '<input type="checkbox" onchange="this.closest(\'.card\').querySelectorAll(\'input.pick\').forEach(c=>c.checked=this.checked)">Select all</label>'+
+        '<button class="secondary small" onclick="bulkPeople(\'returned\', this)">Mark ticked returned</button>'+
+        '<button class="secondary small" onclick="bulkPeople(\'notReturned\', this)">Mark ticked not returned</button>'+
+        '<button class="secondary small" onclick="bulkPeople(\'invoice\', this)">Invoice out ticked</button>'+
+      '</div>'+
       rows.map(r => itemLine(r,
         '<button class="secondary small" onclick="markReturned(['+r.id+'])">Returned</button>'+
-        '<button class="secondary small" onclick="invoiceOutItems(['+r.id+'])">Invoice Out</button>')).join('')+
+        '<button class="secondary small" onclick="markNotReturned(['+r.id+'])">Not returned</button>'+
+        '<button class="secondary small" onclick="invoiceOutItems(['+r.id+'])">Invoice Out</button>', true)).join('')+
       '</div>';
-  }).join('') : '<div class="empty" style="text-align:left;padding:4px 0">Nobody has stock out'+(q?' matching "'+escapeHtml(q)+'"':'')+'.</div>';
+  }).join('') : '<div class="empty" style="text-align:left;padding:4px 0">'+(picked?escapeHtml(picked)+' has no stock out':'Nobody has stock out')+(q?' matching "'+escapeHtml(q)+'"':'')+'.</div>';
+
+  const notReturned = groupByPerson(peopleRows.filter(r => isNotReturned(r) && match(r)));
+  document.getElementById('notReturnedList').innerHTML = notReturned.length ? notReturned.map(([who, rows]) =>
+    '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(who)+'</div>'+
+      '<div class="imeta">'+rows.length+' item'+(rows.length===1?'':'s')+' not returned</div></div></div>'+
+    rows.map(r => itemLine(r, '<button class="secondary small" onclick="undoOutcome('+r.id+')" title="Put this item back on the Still out list">Undo</button>')).join('')+
+    '</div>').join('') : '<div class="empty" style="text-align:left;padding:4px 0">Nothing marked not returned'+(picked?' for '+escapeHtml(picked):'')+'.</div>';
+}
+
+// Bulk action on the ticked items of one person's card
+function bulkPeople(action, btn){
+  const ids = Array.from(btn.closest('.card').querySelectorAll('input.pick:checked')).map(c => Number(c.value));
+  if(!ids.length){ toast('Tick the items first', true); return; }
+  if(action === 'returned') markReturned(ids, true);
+  else if(action === 'notReturned') markNotReturned(ids, true);
+  else invoiceOutItems(ids, true);
 }
 
 async function patchRequestIds(ids, payload){
@@ -1485,7 +1530,7 @@ function peopleSummary(ids){
 }
 
 async function markReturned(ids, all){
-  if(all && !confirm('Mark everything '+peopleSummary(ids)+' as returned?\n\nThey move to "To put back into stock" until you enter the Return Transfer #.')) return;
+  if(all && !confirm('Mark '+peopleSummary(ids)+' as returned?\n\nThey move to "To put back into stock" until you enter the Return Transfer #.')) return;
   try{
     await patchRequestIds(ids, {feedback: RETURNED, received: true, recon_date: todayIso()});
     renderPeople();
@@ -1494,7 +1539,7 @@ async function markReturned(ids, all){
 }
 
 async function invoiceOutItems(ids, all){
-  if(all && !confirm('Invoice out everything '+peopleSummary(ids)+'?\n\nEach item is marked "Invoiced out" with today as the recon date, which settles it.')) return;
+  if(all && !confirm('Invoice out '+peopleSummary(ids)+'?\n\nEach item is marked "Invoiced out" with today as the recon date, which settles it.')) return;
   try{
     await patchRequestIds(ids, {feedback: INVOICED_OUT, recon_date: todayIso()});
     renderPeople();
@@ -1502,7 +1547,18 @@ async function invoiceOutItems(ids, all){
   }catch(e){ console.error(e); toast('Could not invoice that out', true); }
 }
 
-async function undoReturned(id){
+// Not coming back, but not invoiced either — settled and kept in the "Not returned" list for reference
+async function markNotReturned(ids, all){
+  if(all && !confirm('Mark '+peopleSummary(ids)+' as not returned?\n\nThey drop off the still-out list and stay under "Not returned" for reference.')) return;
+  try{
+    await patchRequestIds(ids, {feedback: NOT_RETURNED, received: false, recon_date: todayIso()});
+    renderPeople();
+    toast('Marked not returned');
+  }catch(e){ console.error(e); toast('Could not mark that not returned', true); }
+}
+
+// Undo Returned / Not returned — back onto the still-out list
+async function undoOutcome(id){
   try{
     await patchRequestIds([id], {feedback: null, received: null, recon_date: null});
     renderPeople();
