@@ -253,6 +253,15 @@
     background:var(--accent-ink);margin-bottom:14px;}
   .trail-banner-icon{height:24px;margin:0;}
   .trail-banner-tag{color:rgba(16,25,10,.72);font-weight:500;}
+
+  /* Rotating quotes (Staff Allowance's) — purely decorative, in the empty margin beside the centered
+     900px column, so they only show when there's genuinely spare width: 900 + 2 × (220 quote + 28 edge
+     + ~30 gap) ≈ 1460px. Never competes with the real UI. */
+  #quoteSidebar{position:fixed;top:50%;right:28px;transform:translateY(-50%);width:220px;display:none;text-align:right;}
+  @media (min-width:1460px){ #quoteSidebar{display:block;} }
+  #quoteSidebar .q{font-size:15px;font-weight:500;letter-spacing:-.01em;line-height:1.5;color:var(--grey);opacity:0;transition:opacity 1s ease;}
+  #quoteSidebar .q.show{opacity:1;}
+  #quoteSidebar .attr{font-size:12px;font-weight:500;color:#6b6b6b;margin-top:10px;display:block;}
 </style>
 </head>
 <body>
@@ -268,6 +277,10 @@
     <button id="navManage" onclick="showView('manage')">Manage</button>
   </nav>
 </header>
+
+<div id="quoteSidebar">
+  <div class="q" id="quoteText"></div>
+</div>
 
 <div id="pageWatermark">
   <img src="https://www.freedomofmovement.co.za/cdn/shop/files/favicon.png?v=1760790002&width=400" alt="">
@@ -1752,6 +1765,41 @@ if(deliverBatchId){
   })();
   if(sessionStorage.getItem('srManage')==='1') showManageBody();
 }
+
+// Purely decorative side quotes, same list and timing as the Staff Allowance app — no data, nothing
+// to break. #quoteSidebar sits outside <main>, so it runs on every view.
+const QUOTES = [
+  { q: 'The secret of getting ahead is getting started.', a: 'Mark Twain' },
+  { q: 'Small steps every day lead to big changes.', a: '' },
+  { q: 'Movement is the only cure for stagnation.', a: '' },
+  { q: 'Progress, not perfection.', a: '' },
+  { q: "Every journey begins with a single step.", a: '' },
+  { q: 'Discipline is choosing what you want most over what you want right now.', a: '' },
+  { q: 'The best view comes after the hardest climb.', a: '' },
+  { q: "You don't have to be great to start, but you have to start to be great.", a: 'Zig Ziglar' },
+  { q: 'Keep moving forward.', a: '' },
+  { q: 'Freedom is doing what you love, unapologetically.', a: '' }
+];
+function startQuoteRotation(){
+  const el = document.getElementById('quoteText');
+  if(!el) return;
+  let i = Math.floor(Math.random() * QUOTES.length);
+  function render(){
+    const item = QUOTES[i];
+    el.innerHTML = escapeHtml(item.q) + (item.a ? '<span class="attr">'+escapeHtml(item.a)+'</span>' : '');
+  }
+  render();
+  requestAnimationFrame(() => el.classList.add('show'));
+  setInterval(() => {
+    el.classList.remove('show');
+    setTimeout(() => {
+      i = (i + 1) % QUOTES.length;
+      render();
+      el.classList.add('show');
+    }, 1000); // matches the 1s CSS fade duration
+  }, 9000);
+}
+startQuoteRotation();
 </script>
 </body>
 </html>
