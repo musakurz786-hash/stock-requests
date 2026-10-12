@@ -1198,7 +1198,6 @@ function renderLog(){
       '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+(i.sku?' &middot; SKU '+escapeHtml(i.sku):'')+'</span></span>'+
       statusBadge(computeStatus(i), i)+'</div>'+
       '<div class="logistics-grid">'+
-        '<div class="lf"><label>Transfer #</label><input type="text" value="'+escapeHtml(i.transfer_number||'')+'" onblur="saveField('+i.id+',\'transfer_number\',this.value)"></div>'+
         '<div class="lf"><label>Date Completed</label><input type="date" value="'+(i.date_completed||'')+'" onchange="saveField('+i.id+',\'date_completed\',this.value)"></div>'+
         '<div class="lf"><label>Recon Date</label><input type="date" value="'+(i.recon_date||'')+'" onchange="saveField('+i.id+',\'recon_date\',this.value)"></div>'+
         '<div class="lf"><label>Received?</label><select onchange="saveField('+i.id+',\'received\',this.value)">'+
@@ -1227,8 +1226,40 @@ function renderLog(){
         '<div class="when">'+fmtDate(head.request_date)+'</div>'+
       '</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
+      batchTransferField(head.batch_id)+
       itemsHtml+'</div>';
   }).join('') + '<datalist id="feedbackOptions"><option value="Returned to Stock"><option value="Transferred to rejects"><option value="Reject"><option value="'+INVOICED_OUT+'"></datalist>';
+}
+
+// One Transfer # (TR) per request — a request moves as a single Cin7 transfer, so the number is set
+// once on the card and saved to every item in it. Older requests whose items were given different
+// numbers show them as a hint; typing one number then sets it on all items.
+function batchTransferField(batchId){
+  const items = logRows.filter(r => r.batch_id === batchId);
+  const trs = Array.from(new Set(items.map(r => (r.transfer_number||'').trim()).filter(Boolean)));
+  const mixed = trs.length > 1 || (trs.length === 1 && items.some(r => !(r.transfer_number||'').trim()));
+  return '<div class="field" style="max-width:320px;margin:4px 0 6px">'+
+    '<label>Transfer # (all items)</label>'+
+    '<input type="text" value="'+(mixed ? '' : escapeHtml(trs[0]||''))+'"'+
+      (mixed ? ' placeholder="Mixed: '+escapeHtml(trs.join(', ')||'some blank')+' — type one TR to set all"' : ' placeholder="e.g. TR-12345"')+
+      ' onblur="saveBatchTransfer(\''+batchId+'\', this.value)"></div>';
+}
+
+async function saveBatchTransfer(batchId, value){
+  const items = logRows.filter(r => r.batch_id === batchId);
+  const tr = value.trim() || null;
+  if(!items.length || items.every(r => (r.transfer_number||null) === tr)) return; // nothing changed
+  // a blank box on a "mixed" request is just the empty input — don't wipe the existing numbers
+  if(!tr && items.some(r => r.transfer_number) && new Set(items.map(r => r.transfer_number||'')).size > 1) return;
+  try{
+    await sb('PATCH','requests?deleted_at=is.null&batch_id=eq.'+encodeURIComponent(batchId), {transfer_number: tr});
+    items.forEach(r => r.transfer_number = tr);
+    renderLog();
+    toast(tr ? 'Transfer # saved to '+items.length+' item'+(items.length===1?'':'s') : 'Transfer # cleared');
+  }catch(e){
+    console.error(e);
+    toast('Could not save the transfer number', true);
+  }
 }
 
 async function saveField(id, field, value){
