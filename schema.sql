@@ -328,3 +328,133 @@ revoke all on function stock_requests.sync_product_photos_apply() from public, a
 -- 03:20 / 03:30 UTC = 05:20 / 05:30 SAST, after Staff Allowance's 03:00/03:10 photo sync
 select cron.schedule('sr-photos-queue', '20 3 * * *', $$select stock_requests.sync_product_photos_queue();$$);
 select cron.schedule('sr-photos-apply', '30 3 * * *', $$select stock_requests.sync_product_photos_apply();$$);
+
+-- ============================================================================
+-- MIGRATION (2026-10-12): product categories for the Shop by Category tiles — Staff Allowance's set
+-- (Apparel / Footwear / Accessories / Bags / Wallets / Other). Derived from each SKU's Shopify product
+-- type by the 15-min stock sync (sr-shopify-stock now sends product_type), falling back to the
+-- product name when the type is blank or unrecognised; the nightly photo sync fills any still-empty
+-- category from the website feed's product_type. Departments (Mens/Ladies/Unisex) come from the
+-- product name in the app, no column needed.
+-- ============================================================================
+create or replace function stock_requests.category_for_type(t text) returns text
+language sql immutable set search_path = ''
+as $$
+  select case
+    when coalesce(trim(t),'') = '' then null
+    when t ~* 'repair|shipping|rfid|rfd40|ribbon|label|test|gift ?card|offset|personalis' then 'Other'
+    when t ~* 'clean|care|cooler|carrier|strap|lace|leather food' then 'Accessories'
+    when t ~* 'wallet|card ?holder|purse' then 'Wallets'
+    when t ~* 'bag|backpack|tote|duffel|luggage|crossbody' then 'Bags'
+    when t ~* 'tekkie|sneaker|sandal|slide|vellie|shoe|boot|footwear|slipper|loafer|moccasin|flop|revel|\muk \d' then 'Footwear'
+    when t ~* 'shirt|golfer|short|pant|trouser|jacket|sweater|hoodie|jumper|dress|skirt|skort|sock|track|top|tank|vest|jogger|apparel|knit|fleece|chino|denim|jean|tee|polo|crew|coat|gilet|legging|swim|trunk|boxer|brief|underwear' then 'Apparel'
+    when t ~* 'head|cap|hat|beanie|sunglass|eyewear|belt|timepiece|watch|umbrella|fragrance|lifestyle|accessor|key|jewel|scarf|glove|bottle|mug|towel' then 'Accessories'
+    else 'Other'
+  end
+$$;
+
+-- Shopify product type first; product name when the type gives nothing better than 'Other'
+create or replace function stock_requests.category_for(product_type text, product_name text) returns text
+language sql immutable set search_path = ''
+as $$
+  select case
+    when stock_requests.category_for_type(product_type) is not null
+         and stock_requests.category_for_type(product_type) <> 'Other' then stock_requests.category_for_type(product_type)
+    when stock_requests.category_for_type(product_name) is not null
+         and stock_requests.category_for_type(product_name) <> 'Other' then stock_requests.category_for_type(product_name)
+    else stock_requests.category_for_type(coalesce(nullif(trim(product_type),''), product_name))
+  end
+$$;
+
+create or replace function stock_requests.apply_shopify_stock(items jsonb)
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare n integer;
+begin
+  update stock_requests.products p
+     set available = s.available,
+         category = coalesce(stock_requests.category_for(s.product_type, p.product), p.category),
+         updated_at = now()
+    from (
+      select x->>'sku' as sku, max((x->>'available')::numeric) as available, max(x->>'product_type') as product_type
+        from jsonb_array_elements(items) x
+       where coalesce(x->>'sku','') <> ''
+       group by x->>'sku'
+    ) s
+   where p.sku = s.sku
+     and (p.available is distinct from s.available
+          or p.category is distinct from coalesce(stock_requests.category_for(s.product_type, p.product), p.category));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function stock_requests.apply_shopify_stock(jsonb) from public, anon, authenticated;
+grant execute on function stock_requests.apply_shopify_stock(jsonb) to service_role;
+
+-- photo sync: also fill category from the website feed's product_type where none is set yet
+create or replace function stock_requests.sync_product_photos_apply() returns void
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_queued int; v_problem text; v_pages int; v_count int;
+begin
+  select count(*) into v_queued from stock_requests.photo_sync_pending;
+  if v_queued = 0 then
+    insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+    values (0, 0, 'error', 'Nothing queued: sync_product_photos_queue() did not run before this step');
+    return;
+  end if;
+
+  select string_agg('Page '||q.page||': '||case
+           when r.id is null then 'no response yet'
+           when r.timed_out then 'timed out'
+           else 'status '||coalesce(r.status_code::text,'null')||' '||coalesce(r.error_msg,'') end, '; ' order by q.page)
+    into v_problem
+  from stock_requests.photo_sync_pending q left join net._http_response r on r.id = q.request_id
+  where r.id is null or r.timed_out or r.status_code is distinct from 200;
+
+  if v_problem is not null then
+    insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+    values (0, 0, 'error', v_problem);
+    delete from stock_requests.photo_sync_pending;
+    return;
+  end if;
+
+  select count(*) into v_pages
+  from stock_requests.photo_sync_pending q join net._http_response r on r.id = q.request_id
+  where jsonb_array_length(coalesce(r.content::jsonb->'products','[]'::jsonb)) > 0;
+
+  with var as (
+    select distinct on (v->>'sku') v->>'sku' as sku,
+           prod->'images'->0->>'src' as image_url,
+           stock_requests.category_for_type(prod->>'product_type') as category
+    from stock_requests.photo_sync_pending q
+    join net._http_response r on r.id = q.request_id,
+    jsonb_array_elements(coalesce(r.content::jsonb->'products','[]'::jsonb)) with ordinality as pr(prod, pos),
+    jsonb_array_elements(coalesce(prod->'variants','[]'::jsonb)) as v
+    where coalesce(v->>'sku','') <> ''
+    order by v->>'sku', q.page, pr.pos
+  )
+  update stock_requests.products p
+  set image_url = coalesce(var.image_url, p.image_url),
+      category = coalesce(p.category, var.category),
+      updated_at = now()
+  from var
+  where p.sku = var.sku
+    and ((var.image_url is not null and p.image_url is distinct from var.image_url)
+         or (p.category is null and var.category is not null));
+  get diagnostics v_count = row_count;
+
+  delete from stock_requests.photo_sync_pending;
+  insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+  values (v_pages, v_count, 'ok', null);
+exception when others then
+  insert into stock_requests.photo_sync_log(pages_fetched, updated_count, status, detail)
+  values (0, 0, 'error', sqlerrm);
+end $$;
+revoke all on function stock_requests.sync_product_photos_apply() from public, anon, authenticated;
+
+-- one-off backfill for products Shopify's HQ inventory doesn't list (name-based category)
+update stock_requests.products
+   set category = stock_requests.category_for(null, product), updated_at = now()
+ where (category is null or category = 'Other')
+   and stock_requests.category_for(null, product) is distinct from category;

@@ -69,7 +69,7 @@ const QUERY = `query LocationStock($locationId: ID!, $after: String) {
   location(id: $locationId) {
     inventoryLevels(first: 100, after: $after) {
       pageInfo { hasNextPage endCursor }
-      nodes { item { sku } quantities(names: ["available"]) { name quantity } }
+      nodes { item { sku variant { product { productType } } } quantities(names: ["available"]) { name quantity } }
     }
   }
 }`;
@@ -122,7 +122,8 @@ Deno.serve(async (req) => {
   const previous = await lastStatus();
   try {
     const token = await getToken();
-    const items: { sku: string; available: number }[] = [];
+    // product_type is mapped to a category (Apparel/Footwear/...) by stock_requests.category_for_type()
+    const items: { sku: string; available: number; product_type: string | null }[] = [];
     let after: string | null = null;
     for (let page = 0; page < MAX_PAGES; page++) {
       const data = await shopify(token, { locationId: LOCATION_ID, after });
@@ -132,7 +133,7 @@ Deno.serve(async (req) => {
         if (!sku) continue;
         // deno-lint-ignore no-explicit-any
         const a = n.quantities?.find((q: any) => q.name === "available")?.quantity ?? 0;
-        items.push({ sku, available: Math.max(0, a) });
+        items.push({ sku, available: Math.max(0, a), product_type: n.item?.variant?.product?.productType || null });
       }
       const pi = data.location.inventoryLevels.pageInfo;
       if (!pi.hasNextPage) break;
