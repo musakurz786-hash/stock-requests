@@ -212,6 +212,10 @@
   .product-card .photo svg{width:56px;height:56px;color:var(--grey);}
   .cart-row .thumb svg{width:22px;height:22px;color:var(--grey);}
 
+  /* My Requests: Return / Will not be returned / Invoice out choice buttons */
+  .choice-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;}
+  .choice-row button.chosen{background:var(--brand-green);color:var(--accent-ink);}
+
   /* One-shot "runs off with it" animation on + Add — plays once and removes itself */
   .add-runner{position:absolute;bottom:6px;left:-40px;width:36px;height:36px;pointer-events:none;
     transition:left .8s ease-in,opacity .8s ease-in;opacity:1;}
@@ -373,6 +377,7 @@
       <label>Requester Name</label>
       <select id="mineName" onchange="loadMyRequests()"><option value="">Select your name...</option></select>
     </div>
+    <p style="font-size:13px;color:var(--grey);margin:-8px 0 18px">For stock you've received, tell us what's happening to each item: <b>Return</b> it to stock, it <b>will not be returned</b> (stays where it is), or <b>invoice it out</b>.</p>
     <div id="mineList"></div>
   </div>
 
@@ -392,7 +397,9 @@
     <div id="manageBody" style="display:none">
       <div class="subnav">
         <button id="subLog" class="active" onclick="showSub('log')">Transfer &amp; Recon Log</button>
-        <button id="subPeople" onclick="showSub('people')">By Person</button>
+        <button id="subSheet" onclick="showSub('sheet')">Returns Sheet</button>
+        <!-- By Person is hidden for now (style display:none) — its code is kept in case it's wanted later -->
+        <button id="subPeople" onclick="showSub('people')" style="display:none">By Person</button>
         <button id="subRequesters" onclick="showSub('requesters')">Requesters</button>
         <button id="subStores" onclick="showSub('stores')">Stores</button>
         <button id="subStock" onclick="showSub('stock')">Stock Catalog</button>
@@ -421,6 +428,24 @@
           <div id="historyImportStatus" style="font-size:13px;margin-top:10px;color:var(--grey)"></div>
           <div id="historyImportPreview" style="margin-top:10px"></div>
         </div>
+      </div>
+
+      <div id="sub-sheet" class="subview" style="display:none">
+        <div class="row-flex searchbar">
+          <div class="field"><input type="text" id="sheetSearch" autocomplete="off" placeholder="Search by person or product..." oninput="renderSheet()"></div>
+          <button class="secondary" onclick="loadSheet()">Refresh</button>
+          <button class="secondary" onclick="exportSheetCsv()">Export CSV</button>
+        </div>
+        <p style="font-size:13px;color:var(--grey);margin:-6px 0 6px">What requesters chose in My Requests for stock they received. These only update the request records — stock levels always come from the Shopify sync.</p>
+        <div id="sheetSummary" style="font-size:13px;font-weight:600;margin-bottom:22px"></div>
+        <h2>To invoice out</h2>
+        <div id="sheetInvoice"></div>
+        <h2 style="margin-top:28px">Returned — put back into stock</h2>
+        <p style="font-size:13px;color:var(--grey);margin-top:-8px">Put it back, then enter the Return Transfer # to finish.</p>
+        <div id="sheetReturned"></div>
+        <h2 style="margin-top:28px">Staying in location</h2>
+        <p style="font-size:13px;color:var(--grey);margin-top:-8px">Will not be returned — for reference.</p>
+        <div id="sheetStays"></div>
       </div>
 
       <div id="sub-people" class="subview" style="display:none">
@@ -574,9 +599,21 @@ const INVOICED_OUT = 'Invoiced out';
 // Feedback value set by Manage > By Person's "Not returned": not coming back, not invoiced either —
 // settled (counts as Reconciled) and listed under "Not returned" for reference.
 const NOT_RETURNED = 'Not returned';
+// The three choices a requester makes per item in My Requests (stored in feedback). "Return" and
+// "Will not be returned" reuse the values requesters have always reported; "Invoice out" is a request
+// that stays open until Manage > Returns Sheet marks it invoiced (-> INVOICED_OUT).
+const RETURNED = 'Returned to Stock';
+const STAYS_IN_LOCATION = 'Not returning it';
+const INVOICE_REQUESTED = 'Invoice out requested';
+const REQUESTER_CHOICES = [
+  {value: RETURNED, label: 'Return'},
+  {value: STAYS_IN_LOCATION, label: 'Will not be returned'},
+  {value: INVOICE_REQUESTED, label: 'Invoice out'}
+];
 function computeStatus(r){
   if(r.feedback === INVOICED_OUT) return 'reconciled';
   if(!r.transfer_number) return 'awaiting';
+  if(r.feedback === INVOICE_REQUESTED) return 'transferred'; // still waiting on the invoice
   // "Still holding onto it" is a requester self-report that it's explicitly NOT settled yet —
   // must not count as reconciled just because the feedback field is non-empty.
   if(r.feedback === 'Still holding onto it') return 'transferred';
@@ -585,7 +622,9 @@ function computeStatus(r){
 }
 function statusBadge(status, r){
   const labels = {awaiting:'Awaiting Transfer', transferred:'Transferred', reconciled:'Reconciled'};
-  const label = r && r.feedback === INVOICED_OUT ? 'Invoiced Out' : r && r.feedback === NOT_RETURNED ? 'Not Returned' : labels[status];
+  const byFeedback = {[INVOICED_OUT]:'Invoiced Out', [NOT_RETURNED]:'Not Returned', [INVOICE_REQUESTED]:'Invoice Requested', [STAYS_IN_LOCATION]:'Not Returning'};
+  const label = (r && r.feedback === RETURNED) ? (r.return_transfer_number ? 'Back in Stock' : 'Returning')
+    : (r && byFeedback[r.feedback]) || labels[status];
   return '<span class="badge '+status+'">'+label+'</span>';
 }
 function groupByBatch(rows){
@@ -1022,8 +1061,17 @@ async function submitRequest(){
 }
 
 // ---------------- MY REQUESTS VIEW ----------------
-const MINE_STATUS_OPTIONS = ['Still holding onto it', 'Returned to Stock', 'Not returning it'];
 let mineRows = [];
+
+// Once Manage has settled an item (invoiced it, recorded the return TR, or closed it as not returned)
+// the requester's choice is locked; until then they can change it.
+function mineSettledText(i){
+  if(i.feedback === INVOICED_OUT) return 'Invoiced out'+(i.recon_date?' '+fmtDate(i.recon_date):'');
+  if(i.feedback === NOT_RETURNED) return 'Closed as not returned'+(i.recon_date?' '+fmtDate(i.recon_date):'');
+  if(i.return_transfer_number) return 'Back in stock ('+escapeHtml(i.return_transfer_number)+')';
+  return '';
+}
+function canChoose(i){ return !!i.transfer_number && i.request_type !== 'store' && !mineSettledText(i); }
 
 async function loadMyRequests(){
   const name = document.getElementById('mineName').value.trim();
@@ -1041,34 +1089,36 @@ function renderMineList(){
   list.innerHTML = batches.map(items=>{
     const head = items[0];
     const itemsHtml = items.map(i=>{
-      const statusOptionsHtml = MINE_STATUS_OPTIONS.map(o=>
-        '<option value="'+escapeHtml(o)+'"'+(i.feedback===o?' selected':'')+'>'+escapeHtml(o)+'</option>').join('');
+      const settled = mineSettledText(i);
+      // clicking your current choice again clears it
+      const choices = canChoose(i) ? '<div class="choice-row">'+REQUESTER_CHOICES.map(c =>
+        '<button class="secondary small'+(i.feedback===c.value?' chosen':'')+'" onclick="updateMyFeedback(['+i.id+'], \''+(i.feedback===c.value?'':c.value)+'\')">'+
+          (i.feedback===c.value?'&#10003; ':'')+c.label+'</button>').join('')+'</div>' : '';
       return '<div class="item-block"><div class="iname"><span>'+escapeHtml(i.product)+' <span class="imeta">x'+i.qty+'</span></span>'+
       statusBadge(computeStatus(i), i)+'</div>'+
       (i.transfer_number ? '<div class="imeta">Transfer '+escapeHtml(i.transfer_number)+(i.date_completed?' &middot; '+fmtDate(i.date_completed):'')+'</div>' : '')+
-      (i.feedback === INVOICED_OUT || i.feedback === NOT_RETURNED
-        ? '<div class="imeta" style="color:var(--good)">&#10003; '+(i.feedback === INVOICED_OUT ? 'Invoiced out' : 'Marked not returned')+(i.recon_date?' '+fmtDate(i.recon_date):'')+' — nothing more to do</div>' : '')+
-      (i.transfer_number && i.request_type !== 'store' && i.feedback !== INVOICED_OUT && i.feedback !== NOT_RETURNED ? '<div class="field" style="max-width:280px;margin-top:8px;margin-bottom:0"><label>Your Status Update</label>'+
-        '<select onchange="updateMyFeedback('+i.id+', this.value)">'+
-          '<option value=""'+(i.feedback?'':' selected')+'>— update status —</option>'+statusOptionsHtml+
-        '</select></div>' : '')+
+      (settled ? '<div class="imeta" style="color:var(--good)">&#10003; '+settled+' — nothing more to do</div>' : '')+
+      choices+
       '</div>';
     }).join('');
+    const open = items.filter(canChoose);
+    const allRow = open.length > 1 ? '<div class="choice-row" style="margin:2px 0 6px"><span class="imeta" style="margin-right:4px">All items:</span>'+
+      REQUESTER_CHOICES.map(c => '<button class="secondary small" onclick="updateMyFeedback(['+open.map(r=>r.id).join(',')+'], \''+c.value+'\')">'+c.label+'</button>').join('')+'</div>' : '';
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
       requestOriginLabel(head)+'</div></div>'+
       '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
-      itemsHtml+'</div>';
+      allRow+itemsHtml+'</div>';
   }).join('');
 }
 
-async function updateMyFeedback(id, value){
+async function updateMyFeedback(ids, value){
   try{
-    await sb('PATCH','requests?id=eq.'+id, {feedback: value || null});
-    const row = mineRows.find(r=>r.id===id);
-    if(row) row.feedback = value || null;
+    await sb('PATCH','requests?id=in.('+ids.join(',')+')', {feedback: value || null});
+    mineRows.forEach(r => { if(ids.includes(r.id)) r.feedback = value || null; });
     renderMineList();
-    toast('Status updated');
+    const c = REQUESTER_CHOICES.find(c => c.value === value);
+    toast(c ? 'Saved: '+c.label+(ids.length>1?' ('+ids.length+' items)':'') : 'Choice cleared');
   }catch(e){
     console.error(e);
     toast('Could not save that update', true);
@@ -1092,12 +1142,13 @@ function showManageBody(){
 }
 
 function showSub(name){
-  ['log','people','requesters','stores','stock'].forEach(s=>{
+  ['log','sheet','people','requesters','stores','stock'].forEach(s=>{
     document.getElementById('sub-'+s).style.display = (s===name?'block':'none');
     document.getElementById('sub'+s[0].toUpperCase()+s.slice(1)).classList.toggle('active', s===name);
   });
   if(name==='log') loadLog();
   if(name==='people') loadPeople();
+  if(name==='sheet') loadSheet();
   if(name==='requesters') loadRequestersTable();
   if(name==='stores') loadStoresTable();
   if(name==='stock') loadStockSyncStatus();
@@ -1418,7 +1469,6 @@ function downloadCin7Lines(items, commentFor, filename){
 // one to invoice out). "To put back" = went out on a TR, marked Returned to Stock, no Return
 // Transfer # yet. (Requiring a TR leaves out the 2025 spreadsheet history, which recorded returns
 // without TRs and was settled long ago.)
-const RETURNED = 'Returned to Stock';
 let peopleRows = [];
 function isStillOut(r){
   return !!r.transfer_number && !r.return_transfer_number &&
@@ -1533,7 +1583,7 @@ async function markReturned(ids, all){
   if(all && !confirm('Mark '+peopleSummary(ids)+' as returned?\n\nThey move to "To put back into stock" until you enter the Return Transfer #.')) return;
   try{
     await patchRequestIds(ids, {feedback: RETURNED, received: true, recon_date: todayIso()});
-    renderPeople();
+    rerenderReturns();
     toast('Marked returned — now listed under To put back into stock');
   }catch(e){ console.error(e); toast('Could not mark that returned', true); }
 }
@@ -1542,7 +1592,7 @@ async function invoiceOutItems(ids, all){
   if(all && !confirm('Invoice out '+peopleSummary(ids)+'?\n\nEach item is marked "Invoiced out" with today as the recon date, which settles it.')) return;
   try{
     await patchRequestIds(ids, {feedback: INVOICED_OUT, recon_date: todayIso()});
-    renderPeople();
+    rerenderReturns();
     toast('Invoiced out');
   }catch(e){ console.error(e); toast('Could not invoice that out', true); }
 }
@@ -1552,7 +1602,7 @@ async function markNotReturned(ids, all){
   if(all && !confirm('Mark '+peopleSummary(ids)+' as not returned?\n\nThey drop off the still-out list and stay under "Not returned" for reference.')) return;
   try{
     await patchRequestIds(ids, {feedback: NOT_RETURNED, received: false, recon_date: todayIso()});
-    renderPeople();
+    rerenderReturns();
     toast('Marked not returned');
   }catch(e){ console.error(e); toast('Could not mark that not returned', true); }
 }
@@ -1561,7 +1611,7 @@ async function markNotReturned(ids, all){
 async function undoOutcome(id){
   try{
     await patchRequestIds([id], {feedback: null, received: null, recon_date: null});
-    renderPeople();
+    rerenderReturns();
     toast('Back on the Still out list');
   }catch(e){ console.error(e); toast('Could not undo that', true); }
 }
@@ -1571,7 +1621,7 @@ async function saveReturnTransfer(ids, value){
   if(!tr) return;
   try{
     await patchRequestIds(ids, {return_transfer_number: tr});
-    renderPeople();
+    rerenderReturns();
     toast('Return TR saved — '+ids.length+' item'+(ids.length===1?'':'s')+' finished');
   }catch(e){ console.error(e); toast('Could not save the Return Transfer #', true); }
 }
@@ -1582,6 +1632,101 @@ function exportCin7Returns(ids){
   const who = rows[0].requester_name;
   downloadCin7Lines(rows, r => 'Return to stock '+fmtDate(todayIso())+' - '+who+' - from request '+fmtDate(r.request_date)+(r.transfer_number?' ('+r.transfer_number+')':''),
     'StockTransferLines-Return-'+cin7SafeName(who)+'-'+todayIso()+'.csv');
+}
+
+// both views share peopleRows and the actions above; only the visible one matters
+function rerenderReturns(){
+  if(document.getElementById('sub-sheet').style.display !== 'none') renderSheet();
+  else renderPeople();
+}
+
+// ---- Returns Sheet: the requesters' choices from My Requests, sorted into what to do ----
+// To invoice out = INVOICE_REQUESTED (cleared by "Mark invoiced" -> INVOICED_OUT)
+// Returned = isToPutBack (cleared by entering the Return Transfer #)
+// Staying in location = STAYS_IN_LOCATION, or closed by Manage as NOT_RETURNED — reference only
+function sheetSection(r){
+  if(r.return_transfer_number) return null;
+  if(r.feedback === INVOICE_REQUESTED) return 'invoice';
+  if(isToPutBack(r)) return 'returned';
+  if(r.feedback === STAYS_IN_LOCATION || r.feedback === NOT_RETURNED) return 'stays';
+  return null;
+}
+const SHEET_LABELS = {invoice:'To invoice out', returned:'Returned - put back into stock', stays:'Staying in location'};
+
+async function loadSheet(){
+  ['sheetInvoice','sheetReturned','sheetStays'].forEach(id => document.getElementById(id).innerHTML = '');
+  document.getElementById('sheetSummary').textContent = 'Loading...';
+  try{
+    peopleRows = await sbAll('requests?select=*&deleted_at=is.null&return_transfer_number=is.null&transfer_number=not.is.null&order=request_date.asc');
+    renderSheet();
+  }catch(e){
+    console.error(e);
+    document.getElementById('sheetSummary').textContent = 'Could not load requests.';
+  }
+}
+
+function renderSheet(){
+  const q = document.getElementById('sheetSearch').value.trim().toLowerCase();
+  const match = r => !q || (r.requester_name||'').toLowerCase().includes(q) || (r.product||'').toLowerCase().includes(q) || (r.sku||'').toLowerCase().includes(q);
+  const rows = peopleRows.filter(match);
+  const bySection = s => rows.filter(r => sheetSection(r) === s);
+  // still out and the requester hasn't picked Return / Will not be returned / Invoice out yet
+  const undecided = rows.filter(r => !r.feedback || r.feedback === 'Still holding onto it').length;
+  const counts = {invoice: bySection('invoice').length, returned: bySection('returned').length, stays: bySection('stays').length};
+  document.getElementById('sheetSummary').innerHTML =
+    counts.invoice+' to invoice out &middot; '+counts.returned+' to put back &middot; '+counts.stays+' staying in location'+
+    ' <span class="imeta" style="font-weight:400">&middot; '+undecided+' item'+(undecided===1?'':'s')+' still out with no choice from the requester yet</span>';
+
+  const line = (r, actions) =>
+    '<div class="item-block"><div class="iname"><span>'+escapeHtml(r.product)+' <span class="imeta">x'+r.qty+(r.sku?' &middot; SKU '+escapeHtml(r.sku):'')+'</span></span>'+
+      '<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">'+actions+'</span></div>'+
+    '<div class="imeta">'+fmtDate(r.request_date)+' &middot; '+escapeHtml(r.transfer_number||'')+' &middot; '+escapeHtml(r.reason||'')+
+      (r.feedback===NOT_RETURNED?' &middot; closed by Manage':'')+'</div></div>';
+  const head = (who, n, what, extra) =>
+    '<div class="card-head"><div><div class="who">'+escapeHtml(who)+'</div><div class="imeta">'+n+' item'+(n===1?'':'s')+' '+what+'</div></div>'+(extra||'')+'</div>';
+  const empty = msg => '<div class="empty" style="text-align:left;padding:4px 0 8px">'+msg+'</div>';
+
+  const inv = groupByPerson(bySection('invoice'));
+  document.getElementById('sheetInvoice').innerHTML = inv.length ? inv.map(([who, rs]) =>
+    '<div class="card">'+head(who, rs.length, 'to invoice out', '<button class="secondary small" onclick="markInvoicedFromSheet('+idsArg(rs)+', true)">Mark all invoiced</button>')+
+    rs.map(r => line(r, '<button class="secondary small" onclick="markInvoicedFromSheet(['+r.id+'])">Mark invoiced</button>')).join('')+'</div>').join('')
+    : empty('Nothing to invoice out.');
+
+  const ret = groupByPerson(bySection('returned'));
+  document.getElementById('sheetReturned').innerHTML = ret.length ? ret.map(([who, rs]) =>
+    '<div class="card">'+head(who, rs.length, 'to put back', '<button class="secondary small" onclick="exportCin7Returns('+idsArg(rs)+')" title="Download these items as a Cin7 stock transfer lines import">Export for Cin7</button>')+
+    '<div class="field" style="max-width:320px;margin:4px 0 6px"><label>Return Transfer # (all these items)</label>'+
+      '<input type="text" placeholder="e.g. TR-12345 — finishes them" onblur="saveReturnTransfer('+idsArg(rs)+', this.value)"></div>'+
+    rs.map(r => line(r, '')).join('')+'</div>').join('')
+    : empty('Nothing waiting to go back into stock.');
+
+  const stays = groupByPerson(bySection('stays'));
+  document.getElementById('sheetStays').innerHTML = stays.length ? stays.map(([who, rs]) =>
+    '<div class="card">'+head(who, rs.length, 'staying in location')+rs.map(r => line(r, '')).join('')+'</div>').join('')
+    : empty('Nothing marked as staying in location.');
+}
+
+async function markInvoicedFromSheet(ids, all){
+  if(all && !confirm('Mark '+peopleSummary(ids)+' as invoiced out?')) return;
+  try{
+    await patchRequestIds(ids, {feedback: INVOICED_OUT, recon_date: todayIso()});
+    rerenderReturns();
+    toast('Marked invoiced out');
+  }catch(e){ console.error(e); toast('Could not mark that invoiced', true); }
+}
+
+function exportSheetCsv(){
+  const csvCell = v => { const s = String(v==null?'':v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const order = {invoice:0, returned:1, stays:2};
+  const rows = peopleRows.filter(r => sheetSection(r)).sort((a,b) =>
+    order[sheetSection(a)] - order[sheetSection(b)] || (a.requester_name||'').localeCompare(b.requester_name||'') || String(a.request_date).localeCompare(String(b.request_date)));
+  if(!rows.length){ toast('Nothing on the sheet to export', true); return; }
+  const lines = [['Action','Requester','Request Date','Transfer #','SKU','Product','Qty','Reason'].join(',')];
+  rows.forEach(r => lines.push([SHEET_LABELS[sheetSection(r)], r.requester_name, r.request_date, r.transfer_number, r.sku, r.product, r.qty, r.reason].map(csvCell).join(',')));
+  const blob = new Blob([lines.join('\r\n')+'\r\n'], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'returns-sheet-'+todayIso()+'.csv'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // -- Requesters --
