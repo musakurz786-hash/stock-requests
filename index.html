@@ -491,15 +491,19 @@ async function loadProducts(){
   PRODUCTS = await sbAll('products?select=*&order=product.asc');
 }
 
-// HQ stock on hand, or null when this SKU has never had stock imported (unknown — still
-// requestable, so manually added products and pre-import catalogs keep working).
+// Requestable HQ stock. A SKU with no stock data yet (never seen by the Shopify sync or a stock
+// import — e.g. new lines not stocked at HQ, gift cards) counts as 0, so it's blocked like an
+// out-of-stock item until real stock shows up behind it.
+function hasStockData(p){
+  return !!p && p.available !== null && p.available !== undefined;
+}
 function stockOf(p){
-  if(!p || p.available === null || p.available === undefined) return null;
-  return Math.max(0, Math.floor(Number(p.available)||0));
+  return hasStockData(p) ? Math.max(0, Math.floor(Number(p.available)||0)) : 0;
 }
 function stockLabel(p){
+  if(!hasStockData(p)) return 'No stock yet';
   const s = stockOf(p);
-  return s === null ? '' : (s > 0 ? s+' available' : 'Out of stock');
+  return s > 0 ? s+' available' : 'Out of stock';
 }
 
 // ---------------- NEW REQUEST VIEW ----------------
@@ -541,10 +545,10 @@ function addToCart(sku){
   const p = PRODUCTS.find(x=>x.sku===sku);
   if(!p) return;
   const stock = stockOf(p);
-  if(stock === 0){ toast(p.product+' is out of stock', true); return; }
+  if(stock === 0){ toast(p.product+(hasStockData(p)?' is out of stock':' has no stock yet'), true); return; }
   const existing = cart.find(c=>c.sku===sku);
   if(existing){
-    if(stock !== null && existing.qty >= stock){ toast('Only '+stock+' of '+p.product+' available', true); return; }
+    if(existing.qty >= stock){ toast('Only '+stock+' of '+p.product+' available', true); return; }
     existing.qty += 1;
   }
   else{ cart.push({sku:p.sku, product:p.product, qty:1}); }
@@ -557,7 +561,7 @@ function addToCart(sku){
 function updateCartQty(idx, qty){
   let n = Math.max(1, parseInt(qty)||1);
   const stock = stockOf(PRODUCTS.find(x=>x.sku===cart[idx].sku));
-  if(stock !== null && n > stock){
+  if(n > stock){
     n = Math.max(1, stock);
     toast('Only '+stock+' of '+cart[idx].product+' available', true);
   }
@@ -579,7 +583,7 @@ function renderCart(){
     const p = PRODUCTS.find(x=>x.sku===c.sku);
     const stock = stockOf(p);
     return '<div class="cart-row">'+
-      '<div class="name">'+escapeHtml(c.product)+(c.sku?'<div class="meta">SKU '+escapeHtml(c.sku)+(stock!==null?' &middot; '+stockLabel(p):'')+'</div>':'')+'</div>'+
+      '<div class="name">'+escapeHtml(c.product)+(c.sku?'<div class="meta">SKU '+escapeHtml(c.sku)+' &middot; '+stockLabel(p)+'</div>':'')+'</div>'+
       '<input type="number" min="1"'+(stock?' max="'+stock+'"':'')+' value="'+c.qty+'" onchange="updateCartQty('+idx+', this.value)">'+
       '<button class="rm" onclick="removeFromCart('+idx+')" title="Remove">&times;</button>'+
     '</div>';
@@ -625,7 +629,7 @@ async function submitRequest(){
     // Re-check against the latest stock — the catalog may have been re-imported since this page
     // loaded, and the cart quantities were only validated against the stock seen at that time.
     await loadProducts();
-    const short = cart.filter(c => { const s = stockOf(PRODUCTS.find(x=>x.sku===c.sku)); return s !== null && c.qty > s; });
+    const short = cart.filter(c => { const s = stockOf(PRODUCTS.find(x=>x.sku===c.sku)); return c.qty > s; });
     if(short.length){
       renderCart();
       toast('Not enough stock for: '+short.map(c=>c.product+' ('+stockLabel(PRODUCTS.find(x=>x.sku===c.sku)).toLowerCase()+')').join(', '), true);
@@ -1189,7 +1193,7 @@ function onStockSearch(){
   results.innerHTML = matches.map(p =>
     '<div class="result-row" style="cursor:default">'+
       '<div><div class="name">'+escapeHtml(p.product)+'</div><div class="meta">SKU '+escapeHtml(p.sku)+' &middot; '+escapeHtml(p.category||'')+'</div></div>'+
-      '<div class="stock'+(stockOf(p)===0?' none':'')+'">'+(stockLabel(p)||'Stock not imported')+'</div>'+
+      '<div class="stock'+(stockOf(p)===0?' none':'')+'">'+stockLabel(p)+'</div>'+
     '</div>'
   ).join('');
 }
