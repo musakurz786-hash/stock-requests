@@ -346,7 +346,7 @@
     <div class="field" id="notifyWarehouseField" style="display:flex;align-items:center;gap:8px">
       <input type="checkbox" id="notifyWarehouse" style="flex:none">
       <label style="margin:0;font-weight:400;font-size:13px;color:var(--grey)" for="notifyWarehouse">
-        Also notify warehouse@freedomofmovement.co.za (in case the usual recipient is unavailable)
+        Also notify warehouse@freedomofmovement.co.za and master@freedomofmovement.co.za (in case the usual recipient is unavailable)
       </label>
     </div>
 
@@ -1064,7 +1064,7 @@ async function submitRequest(){
       }else{
         toEmails = [CONFIG.LOGISTICS_EMAIL];
         const notifyWarehouse = document.getElementById('notifyWarehouse').checked;
-        if(notifyWarehouse && CONFIG.WAREHOUSE_EMAIL) toEmails.push(CONFIG.WAREHOUSE_EMAIL);
+        if(notifyWarehouse) [CONFIG.WAREHOUSE_EMAIL, CONFIG.MASTER_EMAIL].filter(Boolean).forEach(e => toEmails.push(e));
       }
       if(toEmails.length){
         emailjs.send(CONFIG.EMAILJS_SERVICE_ID, CONFIG.EMAILJS_TEMPLATE_ID_SUBMITTED, {
