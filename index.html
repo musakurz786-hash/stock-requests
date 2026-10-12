@@ -1214,7 +1214,10 @@ function renderLog(){
     ).join('');
     return '<div class="card"><div class="card-head"><div><div class="who">'+escapeHtml(head.requester_name)+
       requestOriginLabel(head)+'</div></div>'+
-      '<div class="when">'+fmtDate(head.request_date)+'</div></div>'+
+      '<div style="display:flex;align-items:center;gap:10px">'+
+        '<button class="secondary small" onclick="exportCin7Transfer(\''+head.batch_id+'\')" title="Download this request as a Cin7 stock transfer lines import">Export for Cin7</button>'+
+        '<div class="when">'+fmtDate(head.request_date)+'</div>'+
+      '</div></div>'+
       '<div class="note">'+escapeHtml(head.reason)+(head.expected_return_date?' &middot; due back '+fmtDate(head.expected_return_date):'')+'</div>'+
       itemsHtml+'</div>';
   }).join('') + '<datalist id="feedbackOptions"><option value="Returned to Stock"><option value="Transferred to rejects"><option value="Reject"></datalist>';
@@ -1287,6 +1290,34 @@ function exportLogCsv(){
   const blob = new Blob([lines.join('\n')], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'stock-requests-log.csv'; a.click();
+}
+
+// One request -> one Cin7 "Stock Transfer Lines" import file, matching Cin7's template exactly
+// (same header, CRLF line endings, no BOM). Stock always moves out of HQ, so Location is HQ;
+// batch/serial and expiry don't apply to these products and stay blank.
+const CIN7_TRANSFER_LOCATION = 'HQ';
+function exportCin7Transfer(batchId){
+  const items = logRows.filter(r => r.batch_id === batchId);
+  if(!items.length){ toast('Could not find this request — refresh the log and try again', true); return; }
+  const head = items[0];
+  const withSku = items.filter(r => (r.sku||'').trim());
+  const skipped = items.length - withSku.length;
+  if(!withSku.length){ toast('None of these items have a SKU, so Cin7 can\'t import them', true); return; }
+
+  const csvCell = v => { const s = String(v==null?'':v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const who = head.request_type === 'store' ? (head.store_name+' ('+head.requester_name+')') : head.requester_name;
+  const comment = 'Stock request '+fmtDate(head.request_date)+' - '+who+' - '+(head.reason||'');
+  const lines = [['SKU','Name','BatchSerialNumber','ExpiryDate_YYYYMMDD','Transfer Quantity','Comments','Location'].join(',')];
+  withSku.forEach(r => lines.push([r.sku.trim(), r.product, '', '', r.qty, comment, CIN7_TRANSFER_LOCATION].map(csvCell).join(',')));
+
+  const blob = new Blob([lines.join('\r\n')+'\r\n'], {type:'text/csv'});
+  const a = document.createElement('a');
+  const safe = s => String(s||'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'StockTransferLines-'+safe(who)+'-'+head.request_date+'.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  toast(skipped ? 'Exported '+withSku.length+' item'+(withSku.length===1?'':'s')+' — '+skipped+' without a SKU '+(skipped===1?'was':'were')+' left out' : 'Exported '+withSku.length+' item'+(withSku.length===1?'':'s')+' for Cin7');
 }
 
 // -- Requesters --
