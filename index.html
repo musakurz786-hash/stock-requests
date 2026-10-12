@@ -547,6 +547,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script>
+// Only 2026 requests are shown anywhere in the app (My Requests, Transfer & Recon Log, Deleted, Returns
+// Sheet). Older/other-year rows are hidden, not deleted — widen or remove these dates to show them again.
+// The emailed "Mark as Delivered" link opens one specific request and isn't filtered.
+const SHOW_FROM = '2026-01-01', SHOW_TO = '2026-12-31';
+const YEAR_FILTER = '&request_date=gte.'+SHOW_FROM+'&request_date=lte.'+SHOW_TO;
+
 const SBH = {'apikey':CONFIG.SB_KEY,'Authorization':'Bearer '+CONFIG.SB_KEY,'Content-Type':'application/json',
   'Accept-Profile':CONFIG.SB_SCHEMA,'Content-Profile':CONFIG.SB_SCHEMA};
 
@@ -1112,7 +1118,7 @@ async function loadMyRequests(){
   const list = document.getElementById('mineList');
   if(!name){ list.innerHTML=''; return; }
   list.innerHTML = '<div class="empty">Loading...</div>';
-  mineRows = await sb('GET','requests?select=*&deleted_at=is.null&requester_name=eq.'+encodeURIComponent(name)+'&order=request_date.desc&limit=300');
+  mineRows = await sb('GET','requests?select=*'+YEAR_FILTER+'&deleted_at=is.null&requester_name=eq.'+encodeURIComponent(name)+'&order=request_date.desc&limit=300');
   renderMineList();
 }
 
@@ -1240,7 +1246,7 @@ async function setLogFilter(f){
   document.querySelectorAll('.filternav button').forEach(b=>b.classList.toggle('active', b.dataset.f===f));
   if(f === 'deleted' && !deletedLogLoaded){
     document.getElementById('logList').innerHTML = '<div class="empty">Loading...</div>';
-    deletedLogRows = await sb('GET','requests?select=*&deleted_at=not.is.null&order=deleted_at.desc&limit='+DELETED_FETCH_LIMIT);
+    deletedLogRows = await sb('GET','requests?select=*'+YEAR_FILTER+'&deleted_at=not.is.null&order=deleted_at.desc&limit='+DELETED_FETCH_LIMIT);
     deletedLogLoaded = true;
   }
   renderLog();
@@ -1249,7 +1255,7 @@ async function setLogFilter(f){
 const LOG_FETCH_LIMIT = 5000;
 async function loadLog(){
   document.getElementById('logList').innerHTML = '<div class="empty">Loading...</div>';
-  logRows = await sb('GET','requests?select=*&deleted_at=is.null&order=request_date.desc&limit='+LOG_FETCH_LIMIT);
+  logRows = await sb('GET','requests?select=*'+YEAR_FILTER+'&deleted_at=is.null&order=request_date.desc&limit='+LOG_FETCH_LIMIT);
   deletedLogLoaded = false; // re-fetch deleted list next time that tab is opened, in case it changed
   renderLog();
 }
@@ -1519,7 +1525,7 @@ async function loadPeople(){
   document.getElementById('peopleList').innerHTML = '<div class="empty">Loading...</div>';
   document.getElementById('putBackList').innerHTML = '';
   try{
-    peopleRows = await sbAll('requests?select=*&deleted_at=is.null&return_transfer_number=is.null&transfer_number=not.is.null&order=request_date.asc');
+    peopleRows = await sbAll('requests?select=*'+YEAR_FILTER+'&deleted_at=is.null&return_transfer_number=is.null&transfer_number=not.is.null&order=request_date.asc');
     renderPeople();
   }catch(e){
     console.error(e);
@@ -1695,7 +1701,7 @@ async function loadSheet(){
   ['sheetInvoice','sheetReturned','sheetStays'].forEach(id => document.getElementById(id).innerHTML = '');
   document.getElementById('sheetSummary').textContent = 'Loading...';
   try{
-    peopleRows = await sbAll('requests?select=*&deleted_at=is.null&return_transfer_number=is.null&transfer_number=not.is.null&order=request_date.asc');
+    peopleRows = await sbAll('requests?select=*'+YEAR_FILTER+'&deleted_at=is.null&return_transfer_number=is.null&transfer_number=not.is.null&order=request_date.asc');
     renderSheet();
   }catch(e){
     console.error(e);
