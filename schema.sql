@@ -14,8 +14,10 @@ create table products (
   category text,
   subcat text,
   available numeric default 0,
+  image_url text, -- product photo for the "On the rail" strip; the rail stays hidden until at least 3 in-stock products have one
   updated_at timestamptz default now()
 );
+-- already created this table? add the column with: alter table products add column if not exists image_url text;
 
 -- One row per line item. Items submitted together in the same cart share a batch_id so the UI
 -- can group them back into a single "request" card, but each line has its own approve/fulfil status

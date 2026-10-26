@@ -75,6 +75,38 @@
   .badge.fulfilled{background:#e6e6e6;color:var(--ink);}
   .qtyin{width:64px;padding:6px 8px;font-size:12px;}
   select#filterStatus{width:auto;display:inline-block;}
+
+  /* ---- "On the rail": photo rail above the search results ----
+     Featured in-stock items with a website photo hang from a shop rail. Native horizontal scroll plus mouse
+     drag; hangers swing with scroll speed. Hidden until at least 3 products have an image_url. */
+  .rail-section{margin-bottom:22px;}
+  .rail-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:4px;}
+  .rail-head label{margin:0;}
+  .rail-hint{font-size:11px;color:var(--grey);white-space:nowrap;}
+  .rail{position:relative;overflow-x:auto;overflow-y:hidden;cursor:grab;padding:4px 0 10px;scrollbar-width:none;user-select:none;-webkit-user-select:none;
+    -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 24px,#000 calc(100% - 24px),transparent 100%);
+    mask-image:linear-gradient(90deg,transparent 0,#000 24px,#000 calc(100% - 24px),transparent 100%);}
+  .rail::-webkit-scrollbar{display:none;}
+  .rail.dragging{cursor:grabbing;}
+  .rail-track{position:relative;display:flex;align-items:flex-start;gap:20px;width:max-content;padding:0 28px;}
+  .rail-bar{position:absolute;left:0;right:0;top:5px;height:3px;border-radius:3px;pointer-events:none;
+    background:linear-gradient(180deg,#a9afb4,#e4e7ea 55%,#6f767c);box-shadow:0 3px 6px rgba(0,0,0,.28);}
+  .rail-item{position:relative;flex:none;width:128px;background:none;border:none;padding:0;margin:0;color:inherit;font:inherit;text-align:center;cursor:pointer;
+    transform-origin:50% 5px;rotate:calc(var(--sway,0) * var(--k,1) * 1deg);}
+  .rail-item:focus-visible{outline:2px solid var(--brand-green);outline-offset:4px;border-radius:12px;}
+  .rail-hanger{display:block;width:88px;height:32px;margin:0 auto -15px;position:relative;z-index:2;pointer-events:none;overflow:visible;}
+  .rail-photo{position:relative;width:128px;aspect-ratio:4/5;border-radius:12px;overflow:hidden;background:var(--panel);
+    box-shadow:0 0 0 1px var(--line),0 14px 18px -10px rgba(0,0,0,.35);transition:transform .25s ease;}
+  .rail-photo img{width:100%;height:100%;object-fit:cover;display:block;-webkit-user-drag:none;pointer-events:none;}
+  .rail-item:hover .rail-photo{transform:translateY(-3px);}
+  .rail-item:active .rail-photo{transform:scale(.97);}
+  .rail-name{margin-top:10px;font-size:12px;font-weight:bold;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .rail-meta{margin-top:3px;font-size:11px;color:var(--grey);display:flex;align-items:center;justify-content:center;gap:6px;}
+  .rail-meta i{font-style:normal;width:18px;height:18px;border-radius:50%;background:var(--brand-green);color:var(--ink);font-size:13px;line-height:18px;font-weight:bold;}
+  .rail-meta i.sizes{width:auto;height:auto;padding:2px 8px;border-radius:999px;font-size:10px;line-height:1.5;}
+  .model-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--line);font-size:13px;}
+  .model-bar button{background:none;border:none;color:var(--grey);font-size:12px;cursor:pointer;text-decoration:underline;}
+  @media (max-width:520px){ .rail-item,.rail-photo{width:112px;} .rail-hanger{width:78px;} .rail-track{gap:16px;} }
 </style>
 </head>
 <body>
@@ -122,6 +154,11 @@
     <div class="field">
       <label>Search Products</label>
       <input type="text" id="productSearch" placeholder="e.g. Corduroy Overshirt, Tekkie, Vellies..." oninput="onSearch()" disabled>
+    </div>
+
+    <div id="railView" class="rail-section" style="display:none">
+      <div class="rail-head"><label>On the rail</label><span class="rail-hint">Swipe or drag &middot; tap to request</span></div>
+      <div id="rail" class="rail"><div id="railTrack" class="rail-track"></div></div>
     </div>
 
     <div id="results" class="results" style="display:none"></div>
@@ -310,6 +347,7 @@ async function loadRequesters(){
 async function loadProducts(){
   PRODUCTS = await sbAll('products?select=*&order=product.asc');
   document.getElementById('productSearch').disabled = false;
+  buildRail();
 }
 
 // ---------------- NEW REQUEST VIEW ----------------
@@ -321,14 +359,170 @@ function onRequesterChange(){
   updateSubmitEnabled();
 }
 
+// ---- "On the rail": featured, photographed items above the search results ----
+// Needs products.image_url (see schema.sql). Only in-stock items with a photo are eligible, so every hanger shows a
+// real product photo; with fewer than RAIL_MIN of those the rail simply stays hidden.
+const RAIL_SIZE = 12, RAIL_MIN = 3;
+const RAIL_HANGER = '<svg class="rail-hanger" viewBox="0 0 88 32" fill="none" stroke-linecap="round" stroke-linejoin="round">'+
+  '<path d="M44 16V10.5C44 3 53 3 53 9" stroke="#9aa0a6" stroke-width="1.8"/>'+
+  '<path d="M4 31L44 16L84 31" stroke="#b08a5b" stroke-width="2.8"/></svg>';
+let railHasItems = false, railInited = false, railDragMoved = false;
+let railPhotoCount = {}; // photo -> how many SKUs share it (every size of a shoe or tee is its own SKU)
+let activeModel = null;  // {value: photo key, label} while showing every size of one product
+
+// Sizes of one product are separate SKUs that all share a single photo (ignoring the ?v= cache-buster).
+const railPhotoKey = p => String(p.image_url || '').split('?')[0];
+// "FOM Mens Tekkie - Karoo UK 9" -> "FOM Mens Tekkie - Karoo"; "Tee - Black M" -> "Tee - Black"
+const railBaseName = name => String(name).trim().replace(/[\s-]+(?:UK\s*\d+(?:\.\d+)?|XXS|XS|S|M|L|XL|XXL|XXXL|\d{1,2}(?:\.\d+)?)$/i, '').trim() || String(name);
+
+function railPicks(){
+  const seen = new Set();
+  const byCat = {};
+  PRODUCTS.forEach(p => {
+    if(!p.image_url || !(Number(p.available) > 0)) return;
+    // one hanger per photo, so the sizes of a single shoe/tee don't all hang side by side
+    const keys = [railPhotoKey(p), 'n:'+String(p.product).trim().toLowerCase()];
+    if(keys.some(k => seen.has(k))) return;
+    keys.forEach(k => seen.add(k));
+    const c = p.category || 'Other';
+    (byCat[c] = byCat[c] || []).push(p);
+  });
+  // seeded by the date: everyone sees the same rail all day and it changes tomorrow
+  const d = new Date();
+  let seed = d.getFullYear()*372 + d.getMonth()*31 + d.getDate();
+  const rnd = () => (seed = (seed*1664525 + 1013904223) % 4294967296) / 4294967296;
+  const lists = Object.keys(byCat).sort().map(k => {
+    const l = byCat[k].sort((a,b) => String(a.sku).localeCompare(String(b.sku)));
+    for(let i = l.length-1; i > 0; i--){ const j = Math.floor(rnd()*(i+1)); [l[i], l[j]] = [l[j], l[i]]; }
+    return l;
+  });
+  // round-robin across categories so the rail is a mix, not twelve bags in a row
+  const picks = [];
+  while(picks.length < RAIL_SIZE && lists.some(l => l.length)){
+    for(const l of lists){ if(l.length && picks.length < RAIL_SIZE) picks.push(l.shift()); }
+  }
+  return picks;
+}
+
+function buildRail(){
+  initRail();
+  const picks = railPicks();
+  railHasItems = picks.length >= RAIL_MIN;
+  railPhotoCount = {};
+  PRODUCTS.forEach(p => { if(p.image_url){ const k = railPhotoKey(p); railPhotoCount[k] = (railPhotoCount[k] || 0) + 1; } });
+  document.getElementById('railTrack').innerHTML = railHasItems
+    ? '<div class="rail-bar"></div>' + picks.map((p,i) => {
+        const sized = railPhotoCount[railPhotoKey(p)] > 1;
+        const label = sized ? railBaseName(p.product) : p.product;
+        return '<button class="rail-item" style="--k:'+(0.85+(i%3)*0.12).toFixed(2)+'" onclick="railPick('+escapeHtml(JSON.stringify(String(p.sku)))+')" aria-label="'+(sized?'Choose a size of ':'Request ')+escapeHtml(label)+'">'+
+          RAIL_HANGER+
+          '<div class="rail-photo"><img src="'+escapeHtml(p.image_url)+'" alt="" loading="lazy" draggable="false" onerror="this.remove()"></div>'+
+          '<div class="rail-name">'+escapeHtml(label)+'</div>'+
+          '<div class="rail-meta">'+(sized?'<i class="sizes" aria-hidden="true">Sizes</i>':Math.floor(p.available)+' available<i aria-hidden="true">+</i>')+'</div>'+
+        '</button>';
+      }).join('')
+    : '';
+  syncRail();
+}
+
+// shown only on the opening state: no search typed and no product's sizes open
+function syncRail(){
+  const browsing = !activeModel && document.getElementById('productSearch').value.trim().length < 2;
+  document.getElementById('railView').style.display = (browsing && railHasItems) ? 'block' : 'none';
+}
+
+function railPick(sku){
+  if(railDragMoved) return; // that was the end of a drag, not a tap
+  const p = PRODUCTS.find(x => x.sku === sku);
+  if(!p) return;
+  // a sized item opens all of its sizes (so nobody requests a random UK 9); a single-size item is added straight away
+  if(railPhotoCount[railPhotoKey(p)] > 1) selectModel(railPhotoKey(p), railBaseName(p.product));
+  else addToCart(sku);
+}
+
+function selectModel(photoKey, label){
+  activeModel = {value:photoKey, label:label};
+  document.getElementById('productSearch').value = '';
+  onSearch();
+  document.getElementById('results').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function clearModel(){
+  activeModel = null;
+  document.getElementById('productSearch').value = '';
+  onSearch();
+}
+
+function initRail(){
+  if(railInited) return;
+  railInited = true;
+  const rail = document.getElementById('rail'), track = document.getElementById('railTrack');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // hangers swing like pendulums, driven by how fast the rail is scrolling
+  let last = rail.scrollLeft, ang = 0, av = 0, raf = 0;
+  const step = () => {
+    const v = rail.scrollLeft - last; last = rail.scrollLeft;
+    if(reduce){ ang = 0; av = 0; }
+    else { av += -0.06*ang - 0.09*av - v*0.05; ang = Math.max(-14, Math.min(14, ang + av)); }
+    track.style.setProperty('--sway', ang.toFixed(3));
+    if(Math.abs(v) < 0.1 && Math.abs(ang) < 0.02 && Math.abs(av) < 0.002){ raf = 0; track.style.setProperty('--sway', '0'); return; }
+    raf = requestAnimationFrame(step);
+  };
+  rail.addEventListener('scroll', () => { if(!raf) raf = requestAnimationFrame(step); }, {passive:true});
+
+  // mouse drag-to-scroll with a little coast on release (touch and trackpads already scroll natively)
+  let dr = null;
+  rail.addEventListener('pointerdown', e => {
+    if(e.pointerType !== 'mouse' || e.button !== 0) return;
+    dr = {x:e.clientX, s:rail.scrollLeft, moved:false, lx:e.clientX, lt:performance.now(), vx:0};
+  });
+  window.addEventListener('pointermove', e => {
+    if(!dr) return;
+    const dx = e.clientX - dr.x;
+    if(!dr.moved && Math.abs(dx) > 6){ dr.moved = true; rail.classList.add('dragging'); }
+    if(!dr.moved) return;
+    rail.scrollLeft = dr.s - dx;
+    const now = performance.now();
+    dr.vx = 0.8*dr.vx + 0.2*((e.clientX - dr.lx) / Math.max(1, now - dr.lt));
+    dr.lx = e.clientX; dr.lt = now;
+  });
+  const end = () => {
+    if(!dr) return;
+    const was = dr; dr = null;
+    rail.classList.remove('dragging');
+    if(!was.moved) return;
+    railDragMoved = true; setTimeout(() => { railDragMoved = false; }, 0);
+    let v = -was.vx * 16;
+    const coast = () => { if(Math.abs(v) < 0.3) return; rail.scrollLeft += v; v *= 0.94; requestAnimationFrame(coast); };
+    coast();
+  };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+}
+
+// XS < S < M < L < XL ..., then UK/waist sizes numerically (plain A-Z would put "UK 10" before "UK 9" and "L" before "XS")
+const SIZE_ORDER = ['XXS','XS','S','M','L','XL','XXL','XXXL'];
+const sizeRank = name => {
+  const t = (String(name).match(/(?:UK\s*)?(\d+(?:\.\d+)?|[A-Za-z]+)$/) || [])[1] || '';
+  const i = SIZE_ORDER.indexOf(t.toUpperCase());
+  return i >= 0 ? i : (isNaN(parseFloat(t)) ? 999 : 100 + parseFloat(t));
+};
+const bySize = (a,b) => sizeRank(a.product) - sizeRank(b.product) || String(a.product).localeCompare(String(b.product), undefined, {numeric:true});
+
 function onSearch(){
   const q = document.getElementById('productSearch').value.trim().toLowerCase();
   const results = document.getElementById('results');
-  if(q.length < 2){ results.style.display='none'; results.innerHTML=''; return; }
-  const matches = PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,100);
+  if(q.length >= 2) activeModel = null; // typing starts a fresh search
+  syncRail();
+  if(!activeModel && q.length < 2){ results.style.display='none'; results.innerHTML=''; return; }
+  const matches = activeModel
+    ? PRODUCTS.filter(p => railPhotoKey(p) === activeModel.value).sort(bySize)
+    : PRODUCTS.filter(p => p.product.toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q)).slice(0,100);
   results.style.display='block';
-  if(!matches.length){ results.innerHTML = '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
-  results.innerHTML = matches.map(p => {
+  const modelBar = activeModel ? '<div class="model-bar"><span>Sizes of <strong>'+escapeHtml(activeModel.label)+'</strong></span><button onclick="clearModel()">Back to the rail</button></div>' : '';
+  if(!matches.length){ results.innerHTML = modelBar + '<div class="empty">No products match "'+escapeHtml(q)+'"</div>'; return; }
+  results.innerHTML = modelBar + matches.map(p => {
     const out = Number(p.available) <= 0;
     return '<div class="result-row'+(out?' out':'')+'" onclick="addToCart(\''+p.sku.replace(/'/g,"\\'")+'\')">'+
       '<div><div class="name">'+escapeHtml(p.product)+'</div>'+
