@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FOM Stock Requests</title>
-<meta name="theme-color" content="#0a0a0a">
+<meta name="theme-color" content="#f6f4ee">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -266,6 +266,31 @@
   #quoteSidebar .q{font-size:15px;font-weight:500;letter-spacing:-.01em;line-height:1.5;color:var(--grey);opacity:0;transition:opacity 1s ease;}
   #quoteSidebar .q.show{opacity:1;}
   #quoteSidebar .attr{font-size:12px;font-weight:500;color:#6b6b6b;margin-top:10px;display:block;}
+
+  /* ---- Light theme (2026-10): off-white page, white tiles, dark text, same sage accent. Overrides the
+     dark palette above — delete this block to go back to the dark look. ---- */
+  :root{
+    color-scheme:light;
+    --cream:#f6f4ee; --card:#ffffff; --ink:#1b2215; --grey:#66705e;
+    --panel:#eef1ea; --panel-hover:#e3e8de; --line:rgba(27,34,21,.08);
+    --good:#4f7a32; --bad:#c0392b; --warn:#a86a00;
+    --tile-shadow:0 1px 2px rgba(27,34,21,.06),0 8px 24px rgba(27,34,21,.07);
+  }
+  *{scrollbar-color:#c9d1c2 transparent;}
+  .lock,#cartWrap,.admin-section,.product-card,.results,.card,.product-grid .empty{ --panel:#f3f5f0; --panel-hover:#e9ede5; }
+  input::placeholder,textarea::placeholder{color:#8f9887;}
+  header{background:rgba(246,244,238,.88);}
+  header .brand img,.lock img{filter:brightness(0);}
+  header nav button{background:var(--card);box-shadow:0 1px 2px rgba(27,34,21,.06);}
+  header nav button:hover{background:#eef1ea;}
+  #pageWatermark{opacity:.035;}
+  #pageWatermark img{filter:brightness(0);}
+  .category-tile .icon{background:#f1f5ec;color:#5f7f41;}
+  .product-card .photo{background:#f1f3ee;}
+  .badge.awaiting{background:#fdf0d5;color:var(--warn);}
+  .badge.transferred{background:#e3efd8;color:var(--good);}
+  .badge.reconciled{background:#e8ede3;color:var(--ink);}
+  #quoteSidebar .attr{color:#8a9183;}
 </style>
 </head>
 <body>
@@ -879,7 +904,7 @@ function setRequestType(type){
   document.getElementById('storeContactField').style.display = type==='store' ? '' : 'none';
   document.getElementById('afterUseField').style.display = type==='hq' ? '' : 'none';
   document.getElementById('returnDateField').style.display = type==='hq' && afterUsePlan==='return' ? '' : 'none';
-  document.getElementById('notifyWarehouseField').style.display = type==='hq' ? '' : 'none';
+  document.getElementById('notifyWarehouseField').style.display = type==='hq' ? 'flex' : 'none'; // flex keeps the checkbox beside its label
   updateSubmitEnabled();
 }
 
