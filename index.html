@@ -343,6 +343,18 @@
   .toast.err{color:#fff;}
   #quoteSidebar .attr{color:#8495a8;}
   .card .card-head .imeta{font-size:12px;font-weight:600;}
+
+  /* ---- Orange accents (2026-11): extra dashes of the amber-orange on top of the sky theme ---- */
+  header{border-bottom:3px solid var(--amber-red);}
+  .trail-banner-title::after{content:'';display:block;width:56px;height:5px;border-radius:999px;background:var(--amber-red);margin:14px auto 0;}
+  /* a short orange bar in front of section headings */
+  h2::before,#departmentView > label::before,#categoryView > label::before,#afterUseField > label::before{
+    content:'';display:inline-block;width:18px;height:4px;border-radius:999px;background:var(--amber-red);
+    vertical-align:middle;margin:-2px 8px 0 0;}
+  /* category hover: tile goes sky, icon goes orange in a white circle */
+  .category-tile:hover .icon{background:#fff;color:var(--amber-red);}
+  .product-card:not(.out) .stock{color:var(--amber-red);}
+  select:focus,input:focus,textarea:focus{border-color:var(--amber-red);}
 </style>
 </head>
 <body>
