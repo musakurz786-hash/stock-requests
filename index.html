@@ -1453,13 +1453,14 @@ async function invoiceOutBatch(batchId){
   if(!items.length) return;
   const head = items[0];
   if(!confirm('Invoice out '+head.requester_name+'\'s request from '+fmtDate(head.request_date)+' ('+items.length+' item'+(items.length===1?'':'s')+')?\n\n'+
-    'Every item is marked "Invoiced out" with today as the recon date, which clears the request.')) return;
+    'Every item is marked "Invoiced out" with today as the recon date, which clears the request, and a Cin7 sale quote file downloads for loading the invoice.')) return;
   const payload = {feedback: INVOICED_OUT, recon_date: todayIso()};
   try{
     await sb('PATCH','requests?deleted_at=is.null&batch_id=eq.'+encodeURIComponent(batchId), payload);
     items.forEach(r => Object.assign(r, payload));
     renderLog();
-    toast('Invoiced out — request cleared');
+    downloadCin7SaleQuote(items, 'BulkUpdateSaleQuote-'+cin7SafeName(head.requester_name)+'-'+head.request_date+'.csv');
+    toast('Invoiced out — request cleared, Cin7 sale quote file downloaded');
   }catch(e){
     console.error(e);
     toast('Could not invoice out this request', true);
@@ -1511,6 +1512,27 @@ function exportCin7Transfer(batchId){
 }
 
 function cin7SafeName(s){ return String(s||'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+
+// Invoice-out lines as a Cin7 "BulkUpdateSaleQuote" import (template header, CRLF, no BOM), for
+// loading straight into the sale quote. Price and Discount stay blank so Cin7 applies the
+// customer's own price tier and any discount set on the quote. Items without a SKU are left out.
+function downloadCin7SaleQuote(items, filename){
+  const withSku = items.filter(r => (r.sku||'').trim());
+  const skipped = items.length - withSku.length;
+  if(!withSku.length){ toast('None of these items have a SKU, so Cin7 can\'t import them', true); return; }
+  const csvCell = v => { const s = String(v==null?'':v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const lines = [['SKU','Name','Comment','Quantity','Price','Discount'].join(',')];
+  withSku.forEach(r => lines.push([r.sku.trim(), r.product,
+    'Invoice out - '+r.requester_name+' - stock request '+fmtDate(r.request_date)+(r.transfer_number?' ('+r.transfer_number+')':'')+(r.reason?' - '+r.reason:''),
+    r.qty, '', ''].map(csvCell).join(',')));
+  const blob = new Blob([lines.join('\r\n')+'\r\n'], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  if(skipped) toast(skipped+' item'+(skipped===1?'':'s')+' without a SKU '+(skipped===1?'was':'were')+' left out of the Cin7 file', true);
+}
 
 // Writes request lines as a Cin7 StockTransferLines file (template header, CRLF, no BOM).
 // commentFor(row) gives each line's Comments value; items without a SKU are left out.
@@ -1757,7 +1779,11 @@ function renderSheet(){
 
   const inv = groupByPerson(bySection('invoice'));
   document.getElementById('sheetInvoice').innerHTML = inv.length ? inv.map(([who, rs]) =>
-    '<div class="card">'+head(who, rs.length, 'to invoice out', '<button class="secondary small" onclick="markInvoicedFromSheet('+idsArg(rs)+', true)">Mark all invoiced</button>')+
+    '<div class="card">'+head(who, rs.length, 'to invoice out',
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<button class="secondary small" onclick="exportCin7InvoiceOut('+idsArg(rs)+')" title="Download these items as a Cin7 sale quote import">Export for Cin7</button>'+
+        '<button class="secondary small" onclick="markInvoicedFromSheet('+idsArg(rs)+', true)">Mark all invoiced</button>'+
+      '</div>')+
     rs.map(r => line(r, '<button class="secondary small" onclick="markInvoicedFromSheet(['+r.id+'])">Mark invoiced</button>')).join('')+'</div>').join('')
     : empty('Nothing to invoice out.');
 
@@ -1773,6 +1799,12 @@ function renderSheet(){
   document.getElementById('sheetStays').innerHTML = stays.length ? stays.map(([who, rs]) =>
     '<div class="card">'+head(who, rs.length, 'staying in location')+rs.map(r => line(r, '')).join('')+'</div>').join('')
     : empty('Nothing marked as staying in location.');
+}
+
+function exportCin7InvoiceOut(ids){
+  const rows = peopleRows.filter(r => ids.includes(r.id));
+  if(!rows.length) return;
+  downloadCin7SaleQuote(rows, 'BulkUpdateSaleQuote-'+cin7SafeName(rows[0].requester_name)+'-'+todayIso()+'.csv');
 }
 
 async function markInvoicedFromSheet(ids, all){
