@@ -458,3 +458,37 @@ update stock_requests.products
    set category = stock_requests.category_for(null, product), updated_at = now()
  where (category is null or category = 'Other')
    and stock_requests.category_for(null, product) is distinct from category;
+
+-- ============================================================================
+-- MIGRATION (2026-11-11): retail price per SKU from Shopify (variant price), filled by the 15-min
+-- stock sync (sr-shopify-stock now sends price). Used for the Price column of the Cin7 invoice-out
+-- (BulkUpdateSaleQuote) export.
+-- ============================================================================
+alter table stock_requests.products add column if not exists rsp numeric;
+
+create or replace function stock_requests.apply_shopify_stock(items jsonb)
+returns integer language plpgsql security definer set search_path = ''
+as $$
+declare n integer;
+begin
+  update stock_requests.products p
+     set available = s.available,
+         category = coalesce(stock_requests.category_for(s.product_type, p.product), p.category),
+         rsp = coalesce(s.price, p.rsp),
+         updated_at = now()
+    from (
+      select x->>'sku' as sku, max((x->>'available')::numeric) as available, max(x->>'product_type') as product_type,
+             max(nullif(x->>'price','')::numeric) as price
+        from jsonb_array_elements(items) x
+       where coalesce(x->>'sku','') <> ''
+       group by x->>'sku'
+    ) s
+   where p.sku = s.sku
+     and (p.available is distinct from s.available
+          or p.category is distinct from coalesce(stock_requests.category_for(s.product_type, p.product), p.category)
+          or (s.price is not null and p.rsp is distinct from s.price));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function stock_requests.apply_shopify_stock(jsonb) from public, anon, authenticated;
+grant execute on function stock_requests.apply_shopify_stock(jsonb) to service_role;

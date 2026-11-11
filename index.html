@@ -1514,17 +1514,25 @@ function exportCin7Transfer(batchId){
 function cin7SafeName(s){ return String(s||'').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,''); }
 
 // Invoice-out lines as a Cin7 "BulkUpdateSaleQuote" import (template header, CRLF, no BOM), for
-// loading straight into the sale quote. Price and Discount stay blank so Cin7 applies the
-// customer's own price tier and any discount set on the quote. Items without a SKU are left out.
+// loading straight into the sale quote. Price is the Shopify retail price (products.rsp, kept up to
+// date by the 15-min stock sync); Discount is left blank. Items without a SKU are left out; a SKU
+// with no Shopify price gets a blank Price, and a warning, so it can be filled in on the quote.
 function downloadCin7SaleQuote(items, filename){
   const withSku = items.filter(r => (r.sku||'').trim());
   const skipped = items.length - withSku.length;
   if(!withSku.length){ toast('None of these items have a SKU, so Cin7 can\'t import them', true); return; }
   const csvCell = v => { const s = String(v==null?'':v); return /[",\r\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; };
+  const priceFor = sku => { const p = PRODUCTS.find(x => x.sku === sku); return p && p.rsp != null && Number(p.rsp) > 0 ? Number(p.rsp).toFixed(2) : ''; };
+  let unpriced = 0;
   const lines = [['SKU','Name','Comment','Quantity','Price','Discount'].join(',')];
-  withSku.forEach(r => lines.push([r.sku.trim(), r.product,
-    'Invoice out - '+r.requester_name+' - stock request '+fmtDate(r.request_date)+(r.transfer_number?' ('+r.transfer_number+')':'')+(r.reason?' - '+r.reason:''),
-    r.qty, '', ''].map(csvCell).join(',')));
+  withSku.forEach(r => {
+    const price = priceFor(r.sku.trim());
+    if(!price) unpriced++;
+    lines.push([r.sku.trim(), r.product,
+      'Invoice out - '+r.requester_name+' - stock request '+fmtDate(r.request_date)+(r.transfer_number?' ('+r.transfer_number+')':'')+(r.reason?' - '+r.reason:''),
+      r.qty, price, ''].map(csvCell).join(','));
+  });
+  if(unpriced) toast(unpriced+' item'+(unpriced===1?' has':'s have')+' no Shopify price — fill '+(unpriced===1?'it':'them')+' in on the Cin7 quote', true);
   const blob = new Blob([lines.join('\r\n')+'\r\n'], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
